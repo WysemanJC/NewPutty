@@ -1,0 +1,65 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake libgtk-3-dev openssh-server
+      - name: Build (GTK)
+        run: |
+          cmake -S . -B build
+          cmake --build build -j"$(nproc)"
+      - name: Unit tests
+        run: |
+          build/test_jsonstore "$RUNNER_TEMP/puttydir"
+          build/test_sshfp
+          build/test_conf
+      - name: SSHFP end-to-end test
+        run: sudo test/sshfp-e2e.sh build
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: brew install cmake gtk+3 pkg-config
+      - name: Build (GTK)
+        run: |
+          cmake -S . -B build
+          cmake --build build -j"$(sysctl -n hw.ncpu)"
+      - name: Unit tests
+        run: |
+          build/test_jsonstore "$RUNNER_TEMP/puttydir"
+          build/test_sshfp
+
+  windows-mingw:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MinGW
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64
+      - name: Cross-build for Windows
+        run: |
+          cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-mingw.cmake
+          cmake --build build -j"$(nproc)"
+      - name: Check no executable can write the registry
+        run: scripts/check-no-registry-writes.sh build
+
+  windows-msvc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          cmake -S . -B build
+          cmake --build build --config Release
