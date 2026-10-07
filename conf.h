@@ -203,7 +203,7 @@ CONF_OPTION(ssh_prefer_known_hostkeys,
 )
 CONF_OPTION(ssh_verify_host_key_dns,
     VALUE_TYPE(INT), /* SSHFP_OFF, SSHFP_ASK, SSHFP_YES */
-    DEFAULT_INT(SSHFP_YES),
+    DEFAULT_INT(SSHFP_ASK),
     SAVE_KEYWORD("VerifyHostKeyDNS"),
     STORAGE_ENUM(verify_host_key_dns),
 )

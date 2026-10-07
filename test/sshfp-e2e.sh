@@ -38,7 +38,8 @@ printf 'nameserver 127.0.0.1\noptions trust-ad timeout:1 attempts:1\n' \
 
 fail=0
 
-# run_case <name> <fake-dns args> <expected regex> [<PUTTYDIR setup>]
+# run_case <name> <fake-dns args> <expected regex> [<PUTTYDIR setup>
+#          [<extra plink args>]]
 # A case also fails if its output matches $reject (if set).
 reject=""
 run_case() {
@@ -50,7 +51,7 @@ run_case() {
     if [ -n "${4:-}" ]; then eval "$4"; fi
     out=$(PUTTYDIR="$WORK/pdir-$name" unshare -m sh -c "
         mount --bind '$WORK/resolv.conf' /etc/resolv.conf &&
-        '$BUILD/plink' -batch -v -P $PORT -l nobody $HOST true" 2>&1 \
+        '$BUILD/plink' -batch -v -P $PORT -l nobody ${5:-} $HOST true" 2>&1 \
         </dev/null || true)
     kill $dnspid 2>/dev/null || true; wait $dnspid 2>/dev/null || true
     [ -n "${VERBOSE:-}" ] && printf '%s\n' "$out" | sed "s/^/    [$name] /"
@@ -64,10 +65,21 @@ run_case() {
     fi
 }
 
+# PUTTYDIR setup: Default Settings with the given VerifyHostKeyDNS value.
+dns_mode() {
+    echo 'mkdir -p "$WORK/pdir-$name/sessions" && printf "{\"settings\": {\"VerifyHostKeyDNS\": '"$1"'}}\n" > "$WORK/pdir-$name/sessions/%44efault%20%53ettings.json"'
+}
+
 reject="Connection abandoned"
-run_case validated-match "--sshfp '$good' --ad" \
-    "Host key accepted on the strength of a DNSSEC-validated SSHFP record"
+run_case validated-match-yes "--sshfp '$good' --ad" \
+    "Host key accepted on the strength of a DNSSEC-validated SSHFP record" \
+    "$(dns_mode 2)"
 reject="Host key accepted"
+# The default is "ask": even a validated match only informs the prompt.
+run_case validated-match-default-asks "--sshfp '$good' --ad" \
+    "host key matches DNS record \(DNSSEC-validated\)"
+run_case validated-match-default-prompts "--sshfp '$good' --ad" \
+    "Connection abandoned"
 run_case unvalidated-match "--sshfp '$good'" \
     "host key matches DNS record \(not DNSSEC-validated\)"
 run_case unvalidated-match-prompts "--sshfp '$good'" \
@@ -76,9 +88,15 @@ run_case validated-mismatch "--sshfp '$bad' --ad" \
     "DNS FINGERPRINT MISMATCH"
 run_case no-records "--ad" \
     "SSHFP: no matching-algorithm records in DNS"
+reject="SSHFP: (host key|DNS|no matching)"
+# A proxy that resolves host names itself: no SSHFP lookup, even with
+# "yes" and a validated record on offer.
+run_case proxy-resolves-names "--sshfp '$good' --ad" \
+    "SSHFP: not checked, because host name lookups are left to the proxy" \
+    "$(dns_mode 2)" "-proxycmd 'nc 127.0.0.1 $PORT'"
 reject="SSHFP:"
 run_case disabled-in-json-config "--sshfp '$good' --ad" \
     "Connection abandoned" \
-    'mkdir -p "$WORK/pdir-$name/sessions" && printf "{\"settings\": {\"VerifyHostKeyDNS\": 0}}\n" > "$WORK/pdir-$name/sessions/%44efault%20%53ettings.json"'
+    "$(dns_mode 0)"
 
 exit $fail

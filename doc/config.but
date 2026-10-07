@@ -2663,26 +2663,34 @@ cached and matches, no lookup is made.
 
 \b \q{Never look up SSHFP records}: PuTTY makes no DNS query.
 
-\b \q{Report the result, but always ask me}: PuTTY looks up the
-records and says in the host key prompt whether the key matches them,
-but always asks you to confirm.
+\b \q{Report the result, but always ask me} (the default): PuTTY
+looks up the records and says in the host key prompt whether the key
+matches them, but always asks you to confirm.
 
-\b \q{Trust a DNSSEC-validated match} (the default): as above, but
-if the key is not cached and matches an SSHFP record in a DNS answer
-that was \i{DNSSEC}-validated, PuTTY accepts the key without asking.
-It does not store it in the host key cache. A key that contradicts the
-cache always produces the usual warning.
+\b \q{Trust a DNSSEC-validated match}: as above, but if the key is
+not cached and matches an SSHFP record in a DNS answer that was
+\i{DNSSEC}-validated, PuTTY accepts the key without asking. It does not
+store it in the host key cache. A key that contradicts the cache
+always produces the usual warning.
 
 A DNS answer counts as validated only if the system's resolver says so
-(the AD bit), and only where the operating system is configured to
-trust that resolver: for example, with glibc this requires the
-\c{trust-ad} option in \c{/etc/resolv.conf}, and it should only be
-used with a validating resolver on the local machine or reached over a
-trusted path. On Windows, PuTTY cannot currently tell whether an
-answer was validated, so SSHFP results are reported but never skip the
-prompt.
+(the AD bit). PuTTY cannot check that claim itself, so it is only as
+good as the path to the resolver: anyone who can forge a DNS answer
+can also forge the AD bit. Recent versions of glibc ignore the AD bit
+unless the \c{trust-ad} option is set in \c{/etc/resolv.conf}, but
+other systems (including macOS, the BSDs and older glibc) pass it
+through as received. Only choose this setting if the machine uses a
+validating resolver on the local machine or reached over a trusted
+path. On Windows, PuTTY cannot currently tell whether an answer was
+validated, so SSHFP results are reported but never skip the prompt.
 
-The result of the lookup is recorded in the Event Log.
+If you use a proxy that looks up host names for you (see
+\k{config-proxy-dns}), PuTTY does not make an SSHFP lookup either,
+since that would reveal to the local DNS resolver which host you are
+connecting to.
+
+The lookup happens in the background, and its result is recorded in
+the Event Log.
 
 \S{config-ssh-kex-manual-hostkeys} \ii{Manually configuring host keys}
 
