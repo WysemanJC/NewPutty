@@ -1,4 +1,5 @@
 #include "putty.h"
+#include "jsonstore.h"
 #include "storage.h"
 
 extern bool sesslist_demo_mode;
@@ -63,19 +64,22 @@ void gui_term_process_cmdline(Conf *conf, char *cmdline)
                 continue;          /* nothing further needs doing */
             } else if (!strcmp(p, "-cleanup")) {
                 /*
-                 * `putty -cleanup'. Remove all registry
-                 * entries associated with PuTTY, and also find
-                 * and delete the random seed file.
+                 * `putty -cleanup'. Remove all the configuration
+                 * files associated with PuTTY, including the
+                 * random seed file.
                  */
-                char *s1, *s2;
-                s1 = dupprintf("This procedure will remove ALL Registry entries\n"
-                               "associated with %s, and will also remove\n"
-                               "the random seed file. (This only affects the\n"
-                               "currently logged-in user.)\n"
+                char *s1, *s2, *dir = jsonstore_dir();
+                s1 = dupprintf("This procedure will remove ALL configuration\n"
+                               "files stored by %s in\n"
+                               "%s\n"
+                               "including saved sessions, cached host keys\n"
+                               "and the random seed file. (This only affects\n"
+                               "the currently logged-in user.)\n"
                                "\n"
                                "THIS PROCESS WILL DESTROY YOUR SAVED SESSIONS.\n"
                                "Are you really sure you want to continue?",
-                               appname);
+                               appname, dir);
+                sfree(dir);
                 s2 = dupprintf("%s Warning", appname);
                 if (message_box(NULL, s1, s2,
                                 MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2,

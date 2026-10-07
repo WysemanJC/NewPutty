@@ -1,11 +1,16 @@
 /*
  * Implement convenience wrappers on the awkward low-level functions
  * for accessing the Windows registry.
+ *
+ * This build of PuTTY never writes to the registry (all its own data
+ * lives in JSON files; see jsonstore.c), so only read access is
+ * provided here. It is still needed to find other software's
+ * installation details (e.g. MIT Kerberos, the help file).
  */
 
 #include "putty.h"
 
-HKEY open_regkey_fn(bool create, bool write, HKEY hk, const char *path, ...)
+HKEY open_regkey_fn(HKEY hk, const char *path, ...)
 {
     HKEY toret = NULL;
     bool hk_needs_close = false;
@@ -15,14 +20,7 @@ HKEY open_regkey_fn(bool create, bool write, HKEY hk, const char *path, ...)
     for (; path; path = va_arg(ap, const char *)) {
         HKEY hk_sub = NULL;
 
-        DWORD access = KEY_READ | (write ? KEY_WRITE : 0);
-        LONG status;
-        if (create)
-            status = RegCreateKeyEx(
-                hk, path, 0, NULL, REG_OPTION_NON_VOLATILE,
-                access, NULL, &hk_sub, NULL);
-        else
-            status = RegOpenKeyEx(hk, path, 0, access, &hk_sub);
+        LONG status = RegOpenKeyEx(hk, path, 0, KEY_READ, &hk_sub);
 
         if (status != ERROR_SUCCESS)
             goto out;
@@ -47,11 +45,6 @@ HKEY open_regkey_fn(bool create, bool write, HKEY hk, const char *path, ...)
 void close_regkey(HKEY key)
 {
     RegCloseKey(key);
-}
-
-void del_regkey(HKEY key, const char *name)
-{
-    RegDeleteKey(key, name);
 }
 
 char *enum_regkey(HKEY key, int index)
@@ -84,12 +77,6 @@ bool get_reg_dword(HKEY key, const char *name, DWORD *out)
         return true;
 }
 
-bool put_reg_dword(HKEY key, const char *name, DWORD value)
-{
-    return RegSetValueEx(key, name, 0, REG_DWORD, (CONST BYTE *) &value,
-                         sizeof(value)) == ERROR_SUCCESS;
-}
-
 char *get_reg_sz(HKEY key, const char *name)
 {
     DWORD type, size;
@@ -112,13 +99,6 @@ char *get_reg_sz(HKEY key, const char *name)
     return toret;
 }
 
-bool put_reg_sz(HKEY key, const char *name, const char *str)
-{
-    /* You have to store the trailing NUL as well */
-    return RegSetValueEx(key, name, 0, REG_SZ, (CONST BYTE *)str,
-                         1 + strlen(str)) == ERROR_SUCCESS;
-}
-
 /*
  * REG_MULTI_SZ items are stored as a concatenation of NUL-terminated
  * strings, terminated in turn with an empty string, i.e. a second
@@ -127,9 +107,7 @@ bool put_reg_sz(HKEY key, const char *name, const char *str)
  * We represent these in their storage format, as a strbuf - but
  * *without* the second consecutive NUL.
  *
- * So you can build up a new MULTI_SZ value in a strbuf by calling
- * put_asciz once per output string and then put_reg_multi_sz; and you
- * can consume one by initialising a BinarySource to the result of
+ * You can consume one by initialising a BinarySource to the result of
  * get_reg_multi_sz, and then calling get_asciz on it and assuming
  * that !get_err(src) means you have a real output string.
  *
@@ -157,20 +135,6 @@ strbuf *get_reg_multi_sz(HKEY key, const char *name)
     while (strbuf_chomp(toret, '\0'));
     put_byte(toret, '\0');
     return toret;
-}
-
-bool put_reg_multi_sz(HKEY key, const char *name, strbuf *str)
-{
-    /*
-     * Of course, to write our string list into the registry, we _do_
-     * have to include both trailing NULs. But this is easy, because a
-     * strbuf is also designed to hold a single string and make it
-     * conveniently accessible in NUL-terminated form, so it stores a
-     * NUL in its buffer just beyond its formal length. So we just
-     * include that extra byte in the data we write.
-     */
-    return RegSetValueEx(key, name, 0, REG_MULTI_SZ, (CONST BYTE *)str->s,
-                         str->len + 1) == ERROR_SUCCESS;
 }
 
 char *get_reg_sz_simple(HKEY key, const char *name, const char *leaf)

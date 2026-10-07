@@ -316,3 +316,8 @@ void write_setting_filename(settings_w *handle,
 {
     write_setting_s(handle, name, result->path);
 }
+
+void cleanup_all(void)
+{
+    jsonstore_cleanup_all();
+}

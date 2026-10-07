@@ -16,6 +16,7 @@
 #include "security-api.h"
 #include "cryptoapi.h"
 #include "pageant.h"
+#include "storage.h"
 #include "licence.h"
 #include "pageant-rc.h"
 
@@ -70,8 +71,7 @@ static filereq_saved_dir *keypath = NULL;
 #define IDM_PUTTY              0x0090
 #define IDM_SESSIONS_BASE      0x1000
 #define IDM_SESSIONS_MAX       0x2000
-#define PUTTY_REGKEY      "Software\\SimonTatham\\PuTTY\\Sessions"
-#define PUTTY_DEFAULT     "Default%20Settings"
+#define PUTTY_DEFAULT     "Default Settings"
 static int initial_menuitems_count;
 
 /*
@@ -89,6 +89,18 @@ void modalfatalbox(const char *fmt, ...)
                MB_SYSTEMMODAL | MB_ICONERROR | MB_OK);
     sfree(buf);
     exit(1);
+}
+
+void nonfatal(const char *fmt, ...)
+{
+    va_list ap;
+    char *buf;
+
+    va_start(ap, fmt);
+    buf = dupvprintf(fmt, ap);
+    va_end(ap);
+    MessageBox(traywindow, buf, "Pageant Error", MB_ICONERROR | MB_OK);
+    sfree(buf);
 }
 
 struct PassphraseProcStruct {
@@ -871,17 +883,13 @@ static BOOL AddTrayIcon(HWND hwnd)
 static void update_sessions(void)
 {
     int num_entries;
-    HKEY hkey;
-    TCHAR buf[MAX_PATH + 1];
     MENUITEMINFO mii;
     strbuf *sb;
+    settings_e *e;
 
-    int index_key, index_menu;
+    int index_menu;
 
     if (!putty_path)
-        return;
-
-    if (ERROR_SUCCESS != RegOpenKey(HKEY_CURRENT_USER, PUTTY_REGKEY, &hkey))
         return;
 
     for (num_entries = GetMenuItemCount(session_menu);
@@ -889,15 +897,12 @@ static void update_sessions(void)
         num_entries--)
         RemoveMenu(session_menu, 0, MF_BYPOSITION);
 
-    index_key = 0;
     index_menu = 0;
 
     sb = strbuf_new();
-    while (ERROR_SUCCESS == RegEnumKey(hkey, index_key, buf, MAX_PATH)) {
-        if (strcmp(buf, PUTTY_DEFAULT) != 0) {
-            strbuf_clear(sb);
-            unescape_registry_key(buf, sb);
-
+    e = enum_settings_start();
+    while (strbuf_clear(sb), enum_settings_next(e, sb)) {
+        if (strcmp(sb->s, PUTTY_DEFAULT) != 0) {
             memset(&mii, 0, sizeof(mii));
             mii.cbSize = sizeof(mii);
             mii.fMask = MIIM_TYPE | MIIM_STATE | MIIM_ID;
@@ -908,11 +913,9 @@ static void update_sessions(void)
             InsertMenuItem(session_menu, index_menu, true, &mii);
             index_menu++;
         }
-        index_key++;
     }
+    enum_settings_finish(e);
     strbuf_free(sb);
-
-    RegCloseKey(hkey);
 
     if (index_menu == 0) {
         mii.cbSize = sizeof(mii);

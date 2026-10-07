@@ -202,43 +202,64 @@ static char *named_file_leaf(const char *dir, const char *name)
 }
 
 /*
- * Enumerate "<dir>/*.json", yielding decoded names.
+ * Enumerate "<dir>/*.json", yielding decoded names in sorted order
+ * (directory order varies between platforms and filesystems).
  */
 typedef struct named_enum {
-    platform_dir *d;
+    char **names;
+    size_t n, size, pos;
 } named_enum;
+
+static int named_enum_cmp(const void *av, const void *bv)
+{
+    return strcmp(*(char *const *)av, *(char *const *)bv);
+}
 
 static named_enum *named_enum_start(const char *dir)
 {
-    char *path = jsonstore_path(dir);
     named_enum *e = snew(named_enum);
-    e->d = platform_open_dir(path);
+    e->names = NULL;
+    e->n = e->size = e->pos = 0;
+
+    char *path = jsonstore_path(dir);
+    platform_dir *d = platform_open_dir(path);
     sfree(path);
+    if (!d)
+        return e;
+
+    char *leaf;
+    strbuf *sb = strbuf_new();
+    while ((leaf = platform_read_dir(d)) != NULL) {
+        ptrlen pl = ptrlen_from_asciz(leaf);
+        if (pl.len > strlen(JSON_EXT) && leaf[0] != '.' &&
+            ptrlen_endswith(pl, PTRLEN_LITERAL(JSON_EXT), &pl)) {
+            strbuf_clear(sb);
+            decode_name(pl, sb);
+            sgrowarray(e->names, e->size, e->n);
+            e->names[e->n++] = dupstr(sb->s);
+        }
+        sfree(leaf);
+    }
+    strbuf_free(sb);
+    platform_close_dir(d);
+
+    qsort(e->names, e->n, sizeof(*e->names), named_enum_cmp);
     return e;
 }
 
 static bool named_enum_next(named_enum *e, strbuf *out)
 {
-    if (!e->d)
+    if (e->pos >= e->n)
         return false;
-    char *leaf;
-    while ((leaf = platform_read_dir(e->d)) != NULL) {
-        ptrlen pl = ptrlen_from_asciz(leaf);
-        if (pl.len > strlen(JSON_EXT) && leaf[0] != '.' &&
-            ptrlen_endswith(pl, PTRLEN_LITERAL(JSON_EXT), &pl)) {
-            decode_name(pl, out);
-            sfree(leaf);
-            return true;
-        }
-        sfree(leaf);
-    }
-    return false;
+    put_dataz(out, e->names[e->pos++]);
+    return true;
 }
 
 static void named_enum_finish(named_enum *e)
 {
-    if (e->d)
-        platform_close_dir(e->d);
+    for (size_t i = 0; i < e->n; i++)
+        sfree(e->names[i]);
+    sfree(e->names);
     sfree(e);
 }
 
@@ -716,9 +737,4 @@ void jsonstore_cleanup_all(void)
     char *dir = jsonstore_dir();
     platform_delete_dir(dir);
     sfree(dir);
-}
-
-void cleanup_all(void)
-{
-    jsonstore_cleanup_all();
 }

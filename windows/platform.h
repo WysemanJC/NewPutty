@@ -66,6 +66,7 @@ struct Filename {
     char *cpath, *utf8path;
 };
 Filename *filename_from_wstr(const wchar_t *str);
+Filename *filename_from_utf8(const char *ustr);
 const wchar_t *filename_to_wstr(const Filename *fn);
 FILE *f_open(const Filename *filename, const char *mode, bool isprivate);
 
@@ -792,22 +793,15 @@ char *get_jumplist_registry_entries(void);
 #define CLIPUI_DEFAULT_INS CLIPUI_EXPLICIT
 
 /* In utils */
-HKEY open_regkey_fn(bool create, bool write, HKEY base, const char *path, ...);
+/* Read-only: this build never writes to the registry. */
+HKEY open_regkey_fn(HKEY base, const char *path, ...);
 #define open_regkey_ro(base, ...) \
-    open_regkey_fn(false, false, base, __VA_ARGS__, (const char *)NULL)
-#define open_regkey_rw(base, ...) \
-    open_regkey_fn(false, true, base, __VA_ARGS__, (const char *)NULL)
-#define create_regkey(base, ...) \
-    open_regkey_fn(true, true, base, __VA_ARGS__, (const char *)NULL)
+    open_regkey_fn(base, __VA_ARGS__, (const char *)NULL)
 void close_regkey(HKEY key);
-void del_regkey(HKEY key, const char *name);
 char *enum_regkey(HKEY key, int index);
 bool get_reg_dword(HKEY key, const char *name, DWORD *out);
-bool put_reg_dword(HKEY key, const char *name, DWORD value);
 char *get_reg_sz(HKEY key, const char *name);
-bool put_reg_sz(HKEY key, const char *name, const char *str);
 strbuf *get_reg_multi_sz(HKEY key, const char *name);
-bool put_reg_multi_sz(HKEY key, const char *name, strbuf *str);
 
 char *get_reg_sz_simple(HKEY key, const char *name, const char *leaf);
 

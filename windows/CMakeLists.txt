@@ -80,10 +80,11 @@ add_library(guimisc STATIC
 add_executable(pageant
   pageant.c
   help.c
+  no-jump-list.c
   pageant.rc)
 add_dependencies(pageant generated_licence_h)
 target_link_libraries(pageant
-  guimisc eventloop agent network crypto utils
+  guimisc eventloop agent settings network crypto utils
   ${platform_libraries})
 set_target_properties(pageant PROPERTIES WIN32_EXECUTABLE ON)
 installed_program(pageant)
