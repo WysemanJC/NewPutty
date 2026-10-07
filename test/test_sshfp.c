@@ -34,23 +34,99 @@ void random_read(void *buf, size_t size)
     modalfatalbox("random_read called in test_sshfp");
 }
 
-/* The test supplies the "DNS" answer that sshfp_check sees. */
+/*
+ * The test supplies the "DNS" answer that the SSHFP check sees, and
+ * plays the event loop: a lookup started by sshfp_check_start stays
+ * pending until fake_complete() answers it.
+ */
 static SshfpRecordList fake_answer;
 static const char *fake_error;
-char *dns_lookup_sshfp(const char *hostname, SshfpRecordList *out)
+
+struct SshfpQuery {
+    sshfp_query_done_fn done;
+    void *ctx;
+    bool cancelled;
+};
+static SshfpQuery *fake_pending;
+
+SshfpQuery *dns_lookup_sshfp_start(const char *hostname,
+                                   sshfp_query_done_fn done, void *ctx)
 {
-    if (fake_error)
-        return dupstr(fake_error);
-    out->secure = fake_answer.secure;
+    SshfpQuery *q = snew(SshfpQuery);
+    q->done = done;
+    q->ctx = ctx;
+    q->cancelled = false;
+    CHECK(!fake_pending);
+    fake_pending = q;
+    return q;
+}
+
+void dns_lookup_sshfp_cancel(SshfpQuery *q)
+{
+    q->cancelled = true;
+}
+
+static void fake_complete(void)
+{
+    SshfpQuery *q = fake_pending;
+    fake_pending = NULL;
+    if (!q)
+        return;
+
+    SshfpRecordList recs = { 0 };
+    recs.secure = fake_answer.secure;
     for (size_t i = 0; i < fake_answer.n; i++) {
-        sgrowarray(out->recs, out->size, out->n);
-        out->recs[out->n].alg = fake_answer.recs[i].alg;
-        out->recs[out->n].fptype = fake_answer.recs[i].fptype;
-        out->recs[out->n].fp = strbuf_dup(
+        sgrowarray(recs.recs, recs.size, recs.n);
+        recs.recs[recs.n].alg = fake_answer.recs[i].alg;
+        recs.recs[recs.n].fptype = fake_answer.recs[i].fptype;
+        recs.recs[recs.n].fp = strbuf_dup(
             ptrlen_from_strbuf(fake_answer.recs[i].fp));
-        out->n++;
+        recs.n++;
     }
-    return NULL;
+    if (!q->cancelled)
+        q->done(q->ctx, fake_error, &recs);
+    sshfp_record_list_free(&recs);
+    sfree(q);
+}
+
+/* Collects the result of one check. */
+typedef struct CheckOutcome {
+    bool called;
+    SshfpStatus status;
+    bool secure;
+    char *desc;
+} CheckOutcome;
+
+static void check_done(void *vctx, const SshfpResult *res)
+{
+    CheckOutcome *out = (CheckOutcome *)vctx;
+    CHECK(!out->called);
+    out->called = true;
+    out->status = res->status;
+    out->secure = res->secure;
+    out->desc = sshfp_describe(res);
+}
+
+/* Run a whole check, as the event loop would; NOT_CHECKED if no lookup. */
+static SshfpStatus run_check(const char *host, ssh_key *key, int mode,
+                             CheckOutcome *out)
+{
+    memset(out, 0, sizeof(*out));
+    SshfpCheck *chk = sshfp_check_start(host, key, mode, check_done, out);
+    if (!chk) {
+        CHECK(!fake_pending);
+        return SSHFP_NOT_CHECKED;
+    }
+    CHECK(!out->called);       /* never called back from inside start */
+    fake_complete();
+    CHECK(out->called);
+    return out->status;
+}
+
+static void outcome_free(CheckOutcome *out)
+{
+    sfree(out->desc);
+    out->desc = NULL;
 }
 
 static void put_name(strbuf *sb, const char *name)
@@ -195,42 +271,65 @@ static void test_match(void)
     hash_simple(&ssh_sha256, ptrlen_from_strbuf(blob), sha256);
     hash_simple(&ssh_sha1, ptrlen_from_strbuf(blob), sha1);
 
-    SshfpResult res;
+    CheckOutcome res;
 
-    sshfp_check("host.example", key, SSHFP_OFF, &res);
-    CHECK(res.status == SSHFP_NOT_CHECKED);
-    sshfp_check("192.0.2.1", key, SSHFP_YES, &res);
-    CHECK(res.status == SSHFP_NOT_CHECKED);
-    sshfp_check("2001:db8::1", key, SSHFP_YES, &res);
-    CHECK(res.status == SSHFP_NOT_CHECKED);
+    CHECK(run_check("host.example", key, SSHFP_OFF, &res) ==
+          SSHFP_NOT_CHECKED);
+    CHECK(run_check("192.0.2.1", key, SSHFP_YES, &res) ==
+          SSHFP_NOT_CHECKED);
+    CHECK(run_check("2001:db8::1", key, SSHFP_YES, &res) ==
+          SSHFP_NOT_CHECKED);
 
-    sshfp_check("host.example", key, SSHFP_YES, &res);
-    CHECK(res.status == SSHFP_NO_RECORDS);
+    CHECK(run_check("host.example", key, SSHFP_YES, &res) ==
+          SSHFP_NO_RECORDS);
+    outcome_free(&res);
 
     fake_add(1, 2, make_ptrlen(sha256, 32));     /* right hash, wrong alg */
-    sshfp_check("host.example", key, SSHFP_YES, &res);
-    CHECK(res.status == SSHFP_NO_RECORDS);
+    CHECK(run_check("host.example", key, SSHFP_YES, &res) ==
+          SSHFP_NO_RECORDS);
+    outcome_free(&res);
 
     unsigned char wrong[32];
     memcpy(wrong, sha256, 32);
     wrong[31] ^= 1;
     fake_add(4, 2, make_ptrlen(wrong, 32));
-    sshfp_check("host.example", key, SSHFP_YES, &res);
-    CHECK(res.status == SSHFP_MISMATCH);
+    CHECK(run_check("host.example", key, SSHFP_YES, &res) ==
+          SSHFP_MISMATCH);
+    outcome_free(&res);
 
     fake_add(4, 1, make_ptrlen(sha1, 20));
     fake_answer.secure = true;
-    sshfp_check("host.example", key, SSHFP_ASK, &res);
-    CHECK(res.status == SSHFP_MATCH && res.secure);
+    CHECK(run_check("host.example", key, SSHFP_ASK, &res) == SSHFP_MATCH);
+    CHECK(res.secure);
+    outcome_free(&res);
 
     fake_error = "simulated failure";
-    sshfp_check("host.example", key, SSHFP_YES, &res);
-    CHECK(res.status == SSHFP_LOOKUP_FAILED && res.error);
-    char *desc = sshfp_describe(&res);
-    CHECK(strstr(desc, "simulated failure") != NULL);
-    sfree(desc);
-    sshfp_result_clear(&res);
+    CHECK(run_check("host.example", key, SSHFP_YES, &res) ==
+          SSHFP_LOOKUP_FAILED);
+    CHECK(res.desc && strstr(res.desc, "simulated failure") != NULL);
+    outcome_free(&res);
     fake_error = NULL;
+
+    /* A cancelled check never calls back, and frees everything. */
+    memset(&res, 0, sizeof(res));
+    SshfpCheck *chk = sshfp_check_start("host.example", key, SSHFP_ASK,
+                                        check_done, &res);
+    CHECK(chk && fake_pending);
+    sshfp_check_cancel(chk);
+    fake_complete();
+    CHECK(!res.called);
+
+    /* The key needn't outlive sshfp_check_start. */
+    ssh_key *key2 = ssh_key_new_pub(&ssh_ecdsa_ed25519,
+                                    ptrlen_from_strbuf(blob));
+    memset(&res, 0, sizeof(res));
+    chk = sshfp_check_start("host.example", key2, SSHFP_ASK,
+                            check_done, &res);
+    ssh_key_free(key2);
+    CHECK(chk != NULL);
+    fake_complete();
+    CHECK(res.called && res.status == SSHFP_MATCH);
+    outcome_free(&res);
 
     sshfp_record_list_free(&fake_answer);
     ssh_key_free(key);

@@ -191,43 +191,69 @@ static SshfpStatus match_records(const SshfpRecordList *list, ptrlen blob)
     return any ? SSHFP_MISMATCH : SSHFP_NO_RECORDS;
 }
 
-void sshfp_check(const char *hostname, ssh_key *key, int mode,
-                 SshfpResult *out)
-{
-    out->status = SSHFP_NOT_CHECKED;
-    out->secure = false;
-    out->error = NULL;
+struct SshfpCheck {
+    strbuf *blob;                      /* the key's public blob */
+    SshfpQuery *query;
+    sshfp_check_done_fn done;
+    void *ctx;
+};
 
+static void sshfp_check_query_done(void *vctx, const char *err,
+                                   const SshfpRecordList *recs)
+{
+    SshfpCheck *chk = (SshfpCheck *)vctx;
+    SshfpResult res;
+
+    res.status = SSHFP_NOT_CHECKED;
+    res.secure = false;
+    res.error = NULL;
+    if (err) {
+        res.status = SSHFP_LOOKUP_FAILED;
+        res.error = dupstr(err);
+    } else {
+        res.status = match_records(recs, ptrlen_from_strbuf(chk->blob));
+        res.secure = recs->secure;
+    }
+
+    /* The query frees itself once we return. */
+    chk->query = NULL;
+    chk->done(chk->ctx, &res);
+
+    sfree(res.error);
+    strbuf_free(chk->blob);
+    sfree(chk);
+}
+
+SshfpCheck *sshfp_check_start(const char *hostname, ssh_key *key, int mode,
+                              sshfp_check_done_fn done, void *ctx)
+{
     if (mode == SSHFP_OFF || !key || !hostname || !*hostname ||
         ssh_key_alg(key)->is_certificate || hostname_is_ip_literal(hostname))
-        return;
+        return NULL;
 
     strbuf *blob = strbuf_new();
     ssh_key_public_blob(key, BinarySink_UPCAST(blob));
     if (!sshfp_alg_for_blob(ptrlen_from_strbuf(blob))) {
         strbuf_free(blob);
-        return;                        /* no SSHFP algorithm number */
+        return NULL;                   /* no SSHFP algorithm number */
     }
 
-    SshfpRecordList list = { 0 };
-    char *err = dns_lookup_sshfp(hostname, &list);
-    if (err) {
-        out->status = SSHFP_LOOKUP_FAILED;
-        out->error = err;
-    } else {
-        out->status = match_records(&list, ptrlen_from_strbuf(blob));
-        out->secure = list.secure;
-    }
-
-    sshfp_record_list_free(&list);
-    strbuf_free(blob);
+    SshfpCheck *chk = snew(SshfpCheck);
+    chk->blob = blob;
+    chk->done = done;
+    chk->ctx = ctx;
+    chk->query = dns_lookup_sshfp_start(hostname, sshfp_check_query_done, chk);
+    return chk;
 }
 
-void sshfp_result_clear(SshfpResult *res)
+void sshfp_check_cancel(SshfpCheck *chk)
 {
-    sfree(res->error);
-    res->error = NULL;
-    res->status = SSHFP_NOT_CHECKED;
+    if (!chk)
+        return;
+    if (chk->query)
+        dns_lookup_sshfp_cancel(chk->query);
+    strbuf_free(chk->blob);
+    sfree(chk);
 }
 
 char *sshfp_describe(const SshfpResult *res)

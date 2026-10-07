@@ -48,6 +48,7 @@ struct ssh1_login_state {
     bool privatekey_available, privatekey_encrypted;
     prompts_t *cur_prompt;
     SeatPromptResult spr;
+    HostKeyVerify *hkv;        /* host key check waiting for DNS */
     char c;
     int pwpkt_type;
     void *agent_response_to_free;
@@ -113,6 +114,7 @@ static void ssh1_login_free(PacketProtocolLayer *ppl)
     if (s->successor_layer)
         ssh_ppl_free(s->successor_layer);
 
+    verify_ssh_host_key_cancel(&s->hkv);
     conf_free(s->conf);
     sfree(s->savedhost);
     sfree(s->rsabuf);
@@ -246,7 +248,7 @@ static void ssh1_login_process_queue(PacketProtocolLayer *ppl)
             ppl_get_iseat(&s->ppl), s->conf, s->ppl.logctx,
             s->savedhost, s->savedport, NULL,
             "rsa", keystr, keydisp, fingerprints, 0,
-            ssh1_login_dialog_callback, s);
+            ssh1_login_dialog_callback, s, &s->hkv);
 
         ssh2_free_all_fingerprints(fingerprints);
         sfree(keydisp);

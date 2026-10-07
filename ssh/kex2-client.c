@@ -975,8 +975,10 @@ void ssh2kex_coroutine(struct ssh2_transport_state *s, bool *aborted)
 
                 s->spr = verify_ssh_host_key(
                     ppl_get_iseat(&s->ppl), s->conf, s->ppl.logctx,
-                    s->savedhost, s->savedport, s->hkey, ssh_key_cache_id(s->hkey), s->keystr, keydisp,
-                    fingerprints, ca_count, ssh2_transport_dialog_callback, s);
+                    s->savedhost, s->savedport, s->hkey,
+                    ssh_key_cache_id(s->hkey), s->keystr, keydisp,
+                    fingerprints, ca_count, ssh2_transport_dialog_callback, s,
+                    &s->hkv);
 
                 ssh2_free_all_fingerprints(fingerprints);
                 sfree(keydisp);

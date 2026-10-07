@@ -393,13 +393,18 @@ static char *dns_log_msg(const char *host, int addressfamily,
                       ""), reason);
 }
 
+bool proxy_will_resolve_hostname(const char *host, int port, Conf *conf)
+{
+    return (conf_get_int(conf, CONF_proxy_type) != PROXY_NONE &&
+            do_proxy_dns(conf) &&
+            proxy_for_destination(NULL, host, port, conf));
+}
+
 SockAddr *name_lookup(const char *host, int port, char **canonicalname,
                       Conf *conf, int addressfamily, LogContext *logctx,
                       const char *reason)
 {
-    if (conf_get_int(conf, CONF_proxy_type) != PROXY_NONE &&
-        do_proxy_dns(conf) &&
-        proxy_for_destination(NULL, host, port, conf)) {
+    if (proxy_will_resolve_hostname(host, port, conf)) {
 
         if (logctx)
             logeventf(logctx, "Leaving host lookup to proxy of \"%s\""

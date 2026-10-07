@@ -40,12 +40,27 @@ void sshfp_record_list_free(SshfpRecordList *list);
 char *sshfp_parse_dns_response(ptrlen msg, SshfpRecordList *out);
 
 /*
- * Platform-provided: look up the SSHFP records for a host name.
- * Returns NULL on success (with zero or more records), or a
- * dynamically allocated error message. "No such name" and "no SSHFP
- * records" both count as success with zero records.
+ * Platform-provided: look up the SSHFP records for a host name,
+ * without blocking. A DNS lookup can take seconds, and almost
+ * nothing in PuTTY may block, so the platform runs the query in the
+ * background and reports back through the event loop.
+ *
+ * 'done' is called exactly once, from the event loop (never from
+ * within dns_lookup_sshfp_start itself), unless the query is
+ * cancelled first. 'err' is NULL on success, with zero or more
+ * records in 'recs'; otherwise it is an error message. Both belong to
+ * the query and are freed once 'done' returns. "No such name" and "no
+ * SSHFP records" both count as success with zero records.
+ *
+ * After dns_lookup_sshfp_cancel, 'done' is never called; any lookup
+ * still in progress is abandoned and cleaned up when it finishes.
  */
-char *dns_lookup_sshfp(const char *hostname, SshfpRecordList *out);
+typedef struct SshfpQuery SshfpQuery;
+typedef void (*sshfp_query_done_fn)(void *ctx, const char *err,
+                                    const SshfpRecordList *recs);
+SshfpQuery *dns_lookup_sshfp_start(const char *hostname,
+                                   sshfp_query_done_fn done, void *ctx);
+void dns_lookup_sshfp_cancel(SshfpQuery *q);
 
 typedef enum SshfpStatus {
     SSHFP_NOT_CHECKED,  /* disabled, unsuitable key, or IP literal */
@@ -62,13 +77,21 @@ typedef struct SshfpResult {
 } SshfpResult;
 
 /*
- * Look up SSHFP records for 'hostname' and compare them against 'key'.
- * 'mode' is the CONF_ssh_verify_host_key_dns setting; if it's
- * SSHFP_OFF, nothing is looked up.
+ * Start looking up SSHFP records for 'hostname', to compare them
+ * against 'key'. 'mode' is the CONF_ssh_verify_host_key_dns setting.
+ *
+ * Returns NULL if there is nothing to look up (SSHFP_OFF, no key, a
+ * certificate, a key type SSHFP can't describe, or an IP literal);
+ * 'done' is then never called. Otherwise 'done' is called later from
+ * the event loop with the result, which belongs to the check and is
+ * freed once 'done' returns, unless sshfp_check_cancel is called
+ * first. 'key' need not outlive this call.
  */
-void sshfp_check(const char *hostname, ssh_key *key, int mode,
-                 SshfpResult *out);
-void sshfp_result_clear(SshfpResult *res);
+typedef struct SshfpCheck SshfpCheck;
+typedef void (*sshfp_check_done_fn)(void *ctx, const SshfpResult *res);
+SshfpCheck *sshfp_check_start(const char *hostname, ssh_key *key, int mode,
+                              sshfp_check_done_fn done, void *ctx);
+void sshfp_check_cancel(SshfpCheck *chk);
 
 /* A short human-readable description of a result, for the Event Log. */
 char *sshfp_describe(const SshfpResult *res);

@@ -218,6 +218,7 @@ static void ssh2_transport_free(PacketProtocolLayer *ppl)
     if (s->ppl.out_pq)
         pq_concatenate(s->ppl.out_pq, s->ppl.out_pq, &s->pq_out_higher);
 
+    verify_ssh_host_key_cancel(&s->hkv);
     conf_free(s->conf);
 
     ssh_ppl_free(s->higher_layer);

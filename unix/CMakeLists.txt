@@ -43,6 +43,7 @@ add_sources_from_current_dir(settings
   storage.c)
 add_sources_from_current_dir(network
   dns.c network.c fd-socket.c agent-socket.c peerinfo.c local-proxy.c x11.c)
+target_link_libraries(network ${dns_libraries})
 add_sources_from_current_dir(sshcommon
   noise.c)
 add_sources_from_current_dir(sshclient

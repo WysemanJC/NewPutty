@@ -189,6 +189,9 @@ Socket *new_listener(const char *srcaddr, int port, Plug *plug,
 SockAddr *name_lookup(const char *host, int port, char **canonicalname,
                       Conf *conf, int addressfamily, LogContext *logctx,
                       const char *lookup_reason_for_logging);
+/* True if name_lookup would leave this host name for the proxy to
+ * resolve, i.e. the local resolver should not be asked about it. */
+bool proxy_will_resolve_hostname(const char *host, int port, Conf *conf);
 
 /* A further indirection, which also takes care of running a
  * pre-connection command. */

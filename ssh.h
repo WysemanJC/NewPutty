@@ -1994,12 +1994,15 @@ typedef enum WeakCryptoReason {
     WCR_TERRAPIN_AVOIDABLE, /* same, but demoting ChaCha20 can avoid it */
 } WeakCryptoReason;
 
+typedef struct HostKeyVerify HostKeyVerify;
 SeatPromptResult verify_ssh_host_key(
     InteractionReadySeat iseat, Conf *conf, LogContext *logctx,
     const char *host, int port,
     ssh_key *key, const char *keytype, char *keystr, const char *keydisp,
     char **fingerprints, int ca_count,
-    void (*callback)(void *ctx, SeatPromptResult result), void *ctx);
+    void (*callback)(void *ctx, SeatPromptResult result), void *ctx,
+    HostKeyVerify **pending);
+void verify_ssh_host_key_cancel(HostKeyVerify **pending);
 SeatPromptResult confirm_weak_crypto_primitive(
     InteractionReadySeat iseat, const char *algtype, const char *algname,
     void (*callback)(void *ctx, SeatPromptResult result), void *ctx,

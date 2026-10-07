@@ -209,6 +209,7 @@ struct ssh2_transport_state {
     bool strict_kex, enabled_outgoing_crypto, enabled_incoming_crypto;
     bool seen_non_kexinit;
     SeatPromptResult spr;
+    HostKeyVerify *hkv;        /* host key check waiting for DNS */
     bool guessok;
     bool ignorepkt;
     struct kexinit_algorithm_list kexlists[NKEXLIST];
