@@ -35,7 +35,7 @@ releases merge cleanly; don't rename it or reformat it.
 | SSHFP, Unix | Done; unit tests and an end-to-end test against a real sshd pass |
 | SSHFP, Windows | Done, advisory only (see below); not yet run on Windows |
 | macOS | Should build via the GTK port; CI job added but not yet run |
-| Import of existing settings | Not started |
+| Import of existing settings | Windows registry exports (.reg), from the Session panel; tests pass |
 
 ## Configuration directory
 
@@ -161,6 +161,32 @@ Small edits: `conf.h`, `conf-enums.h`, `putty.h` (new setting),
 helpers), `windows/pageant.c` (sessions menu via storage API),
 `windows/putty.c` (`-cleanup` text), `doc/config.but`, CMake files.
 
+## Importing from the registry
+
+The Session panel has an **Import** button (Load now sits beside the
+"Saved Sessions" box, to make room for it under Save and Delete). It
+asks for a `.reg` file, as Registry Editor exports it, and imports
+from `HKEY_CURRENT_USER\Software\SimonTatham\PuTTY`:
+
+| Registry | Becomes |
+|---|---|
+| `Sessions\<name>` | `sessions/<name>.json`, values verbatim (strings as strings, DWORDs as integers, `REG_EXPAND_SZ` as a string) |
+| `SshHostKeys` | entries in `hostkeys.json` (same identifiers and key strings) |
+| `SshHostCAs\<name>` | `hostcas/<name>.json` (old `MatchHosts` lists converted to a validity expression as upstream does) |
+
+* **Nothing is overwritten.** A session or CA with the same name, or
+  a host key entry with the same identifier, is left alone and
+  counted as "already existed". So importing twice is harmless.
+* Everything else in the file is ignored (other keys, the jump list,
+  `RandSeedFile`, binary values). Registry key names are unescaped the
+  way upstream escapes them (`%20` and so on).
+* The file can be UTF-16 (what regedit writes) or REGEDIT4/UTF-8.
+* It's platform-independent (`regimport.c`): it parses the file and
+  writes through `storage.h`, so a `.reg` file can be imported on Linux
+  or macOS too. It never touches the registry.
+* A summary says how many sessions, host keys and CAs were imported
+  or skipped, and lists any lines it couldn't use.
+
 ## Testing
 
 ```
@@ -177,11 +203,10 @@ SSHFP turned off in a hand-written JSON Default Settings file.
 
 ## Next steps
 
-1. **Import existing settings.** A read-only `-import-registry` on
-   Windows (sessions, host keys, CAs from
-   `HKCU\Software\SimonTatham\PuTTY`), and an importer for upstream's
-   Unix text files in `~/.putty`. Without this, switching users lose
-   their sessions and host keys.
+1. **Import existing settings.** Done for Windows registry exports
+   (see *Importing from the registry* above). Still to do: an importer
+   for upstream's Unix text files in `~/.putty`, and perhaps a
+   command-line `-import` for scripted migrations.
 2. **Run on real Windows**: the binaries are only cross-compiled so
    far. Check with Process Monitor that nothing writes the registry,
    including Windows itself on our behalf (the common file dialogs keep

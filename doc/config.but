@@ -115,16 +115,26 @@ name in the list box.
 \b To delete a saved session: single-click to select the session
 name in the list box, and then press the \q{Delete} button.
 
+\b To \i{import} settings from a standard PuTTY installation, which
+keeps them in the Windows \i{Registry}: export the registry key
+\c{HKEY_CURRENT_USER\\Software\\SimonTatham\\PuTTY} to a \c{.reg} file
+(in Registry Editor, right-click the key and choose \q{Export}), then
+press the \q{Import} button and choose that file. PuTTY imports the
+saved sessions, the SSH host key cache and any trusted host
+certification authorities. Anything you already have with the same
+name (or the same host key entry) is left as it is, not overwritten,
+and everything else in the file is ignored. PuTTY tells you how much
+it imported and skipped. The import only reads the file: it never
+reads or writes the registry itself.
+
 Each saved session is independent of the Default Settings
 configuration. If you change your preferences and update Default
 Settings, you must also update every saved session separately.
 
-Saved sessions are stored in the \i{Registry}, at the location
-
-\c HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions
-
-If you need to store them in a file, you could try the method
-described in \k{config-file}.
+Saved sessions are stored as files, one per session, in the
+\c{sessions} folder of PuTTY's configuration directory (\c{.putty} in
+your home folder, unless the \c{PUTTYDIR} environment variable names
+another).
 
 \S{config-closeonexit} \q{\ii{Close window} on exit}
 

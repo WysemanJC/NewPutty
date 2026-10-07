@@ -2529,6 +2529,18 @@ void setup_sshfp_config_box(struct controlbox *b);
 void show_ca_config_box(dlgparam *dlg);
 /* Modal box from setup_sshfp_config_box, whose controls edit 'conf' */
 void show_sshfp_config_box(dlgparam *dlg, Conf *conf);
+/*
+ * Ask the user for a registry export (.reg) to import. If they choose
+ * one, 'done' is called with it (now or later, from the event loop);
+ * the Filename is only valid during that call. If they cancel, 'done'
+ * isn't called.
+ */
+typedef void (*dlg_import_done_fn)(dlgparam *dlg, const Filename *fn,
+                                   void *ctx);
+void dlg_import_file_prompt(dlgparam *dlg, dlg_import_done_fn done,
+                            void *ctx);
+/* Show the summary of an import (as information, or as a warning). */
+void dlg_import_report(dlgparam *dlg, const char *msg, bool success);
 extern const bool has_ca_config_box; /* false if, e.g., we're PuTTYtel */
 
 /* Visible outside config.c so that platforms can use it to recognise

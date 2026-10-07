@@ -270,6 +270,10 @@ add_executable(test_jsonstore
   ${CMAKE_SOURCE_DIR}/test/test_jsonstore.c)
 target_link_libraries(test_jsonstore settings utils)
 
+add_executable(test_regimport
+  ${CMAKE_SOURCE_DIR}/test/test_regimport.c)
+target_link_libraries(test_regimport settings utils)
+
 add_executable(test_sshfp
   ${CMAKE_SOURCE_DIR}/test/test_sshfp.c
   ${CMAKE_SOURCE_DIR}/ssh/sshfp.c)

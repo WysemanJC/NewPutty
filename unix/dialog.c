@@ -4496,3 +4496,81 @@ void show_sshfp_config_box(dlgparam *parent, Conf *conf)
     g_signal_connect(G_OBJECT(sc->window), "key_press_event",
                      G_CALLBACK(win_key_press), &sc->dp);
 }
+
+/*
+ * Choosing a registry export to import (the Import button on the
+ * Session panel).
+ */
+struct import_prompt {
+    dlgparam *dp;
+    dlg_import_done_fn done;
+    void *ctx;
+};
+
+#ifdef USE_GTK_FILE_CHOOSER_DIALOG
+static void import_chooser_response(GtkDialog *dialog, int response,
+                                    gpointer data)
+{
+    struct import_prompt *ip = (struct import_prompt *)data;
+    Filename *fn = NULL;
+
+    if (response == GTK_RESPONSE_ACCEPT) {
+        gchar *path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+        if (path) {
+            fn = filename_from_str(path);
+            g_free(path);
+        }
+    }
+    gtk_widget_destroy(GTK_WIDGET(dialog));
+    if (fn) {
+        ip->done(ip->dp, fn, ip->ctx);
+        filename_free(fn);
+    }
+    sfree(ip);
+}
+#endif
+
+void dlg_import_file_prompt(dlgparam *dp, dlg_import_done_fn done,
+                            void *ctx)
+{
+#ifdef USE_GTK_FILE_CHOOSER_DIALOG
+    struct import_prompt *ip = snew(struct import_prompt);
+    ip->dp = dp;
+    ip->done = done;
+    ip->ctx = ctx;
+
+    GtkWidget *fc = gtk_file_chooser_dialog_new(
+        "Import PuTTY settings from a registry export",
+        GTK_WINDOW(dp->window), GTK_FILE_CHOOSER_ACTION_OPEN,
+        STANDARD_CANCEL_LABEL, GTK_RESPONSE_CANCEL,
+        STANDARD_OPEN_LABEL, GTK_RESPONSE_ACCEPT,
+        (const gchar *)NULL);
+
+    GtkFileFilter *filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "Registry export files (*.reg)");
+    gtk_file_filter_add_pattern(filter, "*.reg");
+    gtk_file_filter_add_pattern(filter, "*.REG");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(fc), filter);
+    filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "All files");
+    gtk_file_filter_add_pattern(filter, "*");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(fc), filter);
+
+    gtk_window_set_modal(GTK_WINDOW(fc), true);
+    g_signal_connect(G_OBJECT(fc), "response",
+                     G_CALLBACK(import_chooser_response), ip);
+    gtk_widget_show(fc);
+#else
+    dlg_error_msg(dp, "Importing settings needs GTK 2.4 or later.");
+#endif
+}
+
+void dlg_import_report(dlgparam *dp, const char *msg, bool success)
+{
+    create_message_box(
+        dp->window, success ? "PuTTY: import complete" :
+        "PuTTY: import finished with problems", msg,
+        string_width("Saved sessions: 999 imported, 999 already existed "
+                     "(left unchanged)"),
+        true, &buttons_ok, trivial_post_dialog_fn, NULL);
+}

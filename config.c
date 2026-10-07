@@ -9,6 +9,7 @@
 #include "putty.h"
 #include "dialog.h"
 #include "storage.h"
+#include "regimport.h"
 #include "tree234.h"
 
 #define PRINTER_DISABLED_STRING "None (printing disabled)"
@@ -781,6 +782,7 @@ static void sshbug_handler_manual_only(dlgcontrol *ctrl, dlgparam *dlg,
 
 struct sessionsaver_data {
     dlgcontrol *editbox, *listbox, *loadbutton, *savebutton, *delbutton;
+    dlgcontrol *importbutton;
     dlgcontrol *okbutton, *cancelbutton;
     struct sesslist sesslist;
     bool midsession;
@@ -821,6 +823,28 @@ static bool load_selected_session(
      * changing the value of the edit box. */
     dlg_listbox_select(ssd->listbox, dlg, i);
     return true;
+}
+
+/*
+ * Called with the file the user chose after pressing Import: bring in
+ * upstream PuTTY's sessions, host keys and CAs from a registry export,
+ * without replacing anything that already exists.
+ */
+static void sessionsaver_import(dlgparam *dlg, const Filename *fn,
+                                void *vctx)
+{
+    struct sessionsaver_data *ssd = (struct sessionsaver_data *)vctx;
+    RegImportResult res;
+    regimport_file(fn, &res);
+
+    get_sesslist(&ssd->sesslist, false);
+    get_sesslist(&ssd->sesslist, true);
+    dlg_refresh(ssd->listbox, dlg);
+
+    char *report = regimport_describe(&res);
+    dlg_import_report(dlg, report, res.ok && !res.errors->len);
+    sfree(report);
+    regimport_result_free(&res);
 }
 
 static void sessionsaver_handler(dlgcontrol *ctrl, dlgparam *dlg,
@@ -913,6 +937,9 @@ static void sessionsaver_handler(dlgcontrol *ctrl, dlgparam *dlg,
                 get_sesslist(&ssd->sesslist, true);
                 dlg_refresh(ssd->listbox, dlg);
             }
+        } else if (!ssd->midsession &&
+                   ssd->importbutton && ctrl == ssd->importbutton) {
+            dlg_import_file_prompt(dlg, sessionsaver_import, ssd);
         } else if (ctrl == ssd->okbutton) {
             if (ssd->midsession) {
                 /* In a mid-session Change Settings, Apply is always OK. */
@@ -1956,20 +1983,14 @@ void setup_config_box(struct controlbox *b, bool midsession,
                                 HELPCTX(session_saved),
                                 sessionsaver_handler, P(ssd), P(NULL));
     ssd->editbox->column = 0;
-    /* Reset columns so that the buttons are alongside the list, rather
-     * than alongside that edit box. */
-    ctrl_columns(s, 1, 100);
-    ctrl_columns(s, 2, 75, 25);
-    ssd->listbox = ctrl_listbox(s, NULL, NO_SHORTCUT,
-                                HELPCTX(session_saved),
-                                sessionsaver_handler, P(ssd));
-    ssd->listbox->column = 0;
-    ssd->listbox->listbox.height = 7;
     if (!midsession) {
+        /* Load sits beside the edit box, which leaves room beside the
+         * list for Import under Save and Delete. */
         ssd->loadbutton = ctrl_pushbutton(s, "Load", 'l',
                                           HELPCTX(session_saved),
                                           sessionsaver_handler, P(ssd));
         ssd->loadbutton->column = 1;
+        ssd->loadbutton->align_next_to = ssd->editbox;
     } else {
         /* We can't offer the Load button mid-session, as it would allow the
          * user to load and subsequently save settings they can't see. (And
@@ -1977,6 +1998,15 @@ void setup_config_box(struct controlbox *b, bool midsession,
          * shouldn't be a problem, but.) */
         ssd->loadbutton = NULL;
     }
+    /* Reset columns so that the other buttons are alongside the list,
+     * rather than alongside that edit box. */
+    ctrl_columns(s, 1, 100);
+    ctrl_columns(s, 2, 75, 25);
+    ssd->listbox = ctrl_listbox(s, NULL, NO_SHORTCUT,
+                                HELPCTX(session_saved),
+                                sessionsaver_handler, P(ssd));
+    ssd->listbox->column = 0;
+    ssd->listbox->listbox.height = 7;
     /* "Save" button is permitted mid-session. */
     ssd->savebutton = ctrl_pushbutton(s, "Save", 'v',
                                       HELPCTX(session_saved),
@@ -1987,9 +2017,16 @@ void setup_config_box(struct controlbox *b, bool midsession,
                                          HELPCTX(session_saved),
                                          sessionsaver_handler, P(ssd));
         ssd->delbutton->column = 1;
+        /* Import of upstream PuTTY's registry settings: not mid-session,
+         * like Load and Delete. */
+        ssd->importbutton = ctrl_pushbutton(s, "Import", 'i',
+                                            HELPCTX(session_saved),
+                                            sessionsaver_handler, P(ssd));
+        ssd->importbutton->column = 1;
     } else {
         /* Disable the Delete button mid-session too, for UI consistency. */
         ssd->delbutton = NULL;
+        ssd->importbutton = NULL;
     }
     ctrl_columns(s, 1, 100);
 

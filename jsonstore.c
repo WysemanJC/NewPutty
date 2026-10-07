@@ -542,6 +542,49 @@ void store_host_key(Seat *seat, const char *hostname, int port,
     json_free(doc);
 }
 
+char *jsonstore_add_host_keys(size_t n, const char *const *ids,
+                              const char *const *keys,
+                              size_t *added, size_t *existing)
+{
+    *added = *existing = 0;
+
+    char *err = NULL;
+    JsonValue *doc = load_hostkeys(&err);
+    if (err) {
+        /* As in store_host_key: never overwrite a cache we can't read. */
+        char *msg = dupprintf("unable to read the host key cache: %s", err);
+        sfree(err);
+        return msg;
+    }
+    if (!doc)
+        doc = new_envelope(FORMAT_HOSTKEYS);
+
+    JsonValue *obj = json_object_get(doc, "keys");
+    if (!obj || json_type(obj) != JSON_OBJECT) {
+        obj = json_new_object();
+        json_object_set(doc, "keys", obj);
+    }
+
+    for (size_t i = 0; i < n; i++) {
+        if (json_object_get(obj, ids[i])) {
+            (*existing)++;             /* never replace a cached key */
+        } else {
+            json_object_set(obj, ids[i], json_new_string(keys[i]));
+            (*added)++;
+        }
+    }
+
+    if (*added && (err = jsonstore_save(HOSTKEYS_FILE, doc)) != NULL) {
+        char *msg = dupprintf("unable to save the host key cache: %s", err);
+        sfree(err);
+        *added = 0;
+        json_free(doc);
+        return msg;
+    }
+    json_free(doc);
+    return NULL;
+}
+
 /* ----------------------------------------------------------------------
  * Trusted host certification authorities.
  *

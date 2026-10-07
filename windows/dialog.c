@@ -1427,3 +1427,37 @@ void show_sshfp_config_box(dlgparam *dp, Conf *conf)
     }
     pds_free(pds);
 }
+
+void dlg_import_file_prompt(dlgparam *dp, dlg_import_done_fn done,
+                            void *ctx)
+{
+    wchar_t path[4096] = L"";
+    OPENFILENAMEW of;
+
+    memset(&of, 0, sizeof(of));
+    of.lStructSize = sizeof(of);
+    of.hwndOwner = dp->hwnd;
+    of.lpstrFilter = L"Registry export files (*.reg)\0*.reg\0"
+        L"All Files (*.*)\0*\0\0";
+    of.nFilterIndex = 1;
+    of.lpstrFile = path;
+    of.nMaxFile = lenof(path);
+    of.lpstrTitle = L"Import PuTTY settings from a registry export";
+    /* OFN_DONTADDTORECENT: don't let Windows record the file in the
+     * registry's recent-documents lists on our behalf. */
+    of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY |
+        OFN_NOCHANGEDIR | OFN_DONTADDTORECENT;
+
+    if (!GetOpenFileNameW(&of))
+        return;                        /* cancelled */
+
+    Filename *fn = filename_from_wstr(path);
+    done(dp, fn, ctx);
+    filename_free(fn);
+}
+
+void dlg_import_report(dlgparam *dp, const char *msg, bool success)
+{
+    MessageBox(dp->hwnd, msg, "PuTTY: import from registry export",
+               MB_OK | (success ? MB_ICONINFORMATION : MB_ICONWARNING));
+}

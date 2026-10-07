@@ -50,6 +50,17 @@ char *jsonstore_save(const char *leaf, const JsonValue *v);
 /* Remove every file this module manages (used by cleanup_all). */
 void jsonstore_cleanup_all(void);
 
+/*
+ * Add host keys to the cache in one go, leaving any identifier that's
+ * already present untouched. 'ids' are cache identifiers as used by
+ * the registry and this store ("keytype@port:host"); 'keys' the key
+ * strings. Returns NULL on success, or a dynamically allocated error
+ * message (in which case nothing was added).
+ */
+char *jsonstore_add_host_keys(size_t n, const char *const *ids,
+                              const char *const *keys,
+                              size_t *added, size_t *existing);
+
 /* ----------------------------------------------------------------------
  * Provided by each platform's storage.c.
  */
