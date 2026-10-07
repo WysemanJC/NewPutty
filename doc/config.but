@@ -2652,6 +2652,38 @@ algorithms configured in the preference list described in
 \k{config-ssh-hostkey-order}, so that a listener will find out nothing
 about what keys you had stored.
 
+\S{config-ssh-sshfp} Checking host keys against \i{SSHFP} records in DNS
+
+A server administrator can publish fingerprints of a server's host
+keys in the DNS, as SSHFP records (RFC 4255 and RFC 6594). When PuTTY
+is presented with a host key it has not cached (or one that differs
+from the cached key), it can look these records up and use them as
+evidence about whether the key is genuine. If the key is already
+cached and matches, no lookup is made.
+
+\b \q{Never look up SSHFP records}: PuTTY makes no DNS query.
+
+\b \q{Report the result, but always ask me}: PuTTY looks up the
+records and says in the host key prompt whether the key matches them,
+but always asks you to confirm.
+
+\b \q{Trust a DNSSEC-validated match} (the default): as above, but
+if the key is not cached and matches an SSHFP record in a DNS answer
+that was \i{DNSSEC}-validated, PuTTY accepts the key without asking.
+It does not store it in the host key cache. A key that contradicts the
+cache always produces the usual warning.
+
+A DNS answer counts as validated only if the system's resolver says so
+(the AD bit), and only where the operating system is configured to
+trust that resolver: for example, with glibc this requires the
+\c{trust-ad} option in \c{/etc/resolv.conf}, and it should only be
+used with a validating resolver on the local machine or reached over a
+trusted path. On Windows, PuTTY cannot currently tell whether an
+answer was validated, so SSHFP results are reported but never skip the
+prompt.
+
+The result of the lookup is recorded in the Event Log.
+
 \S{config-ssh-kex-manual-hostkeys} \ii{Manually configuring host keys}
 
 In some situations, if PuTTY's automated host key management is not

@@ -10,6 +10,7 @@
 #include "mpint.h"
 #include "ssh.h"
 #include "storage.h"
+#include "sshfp.h"
 #include "bpp.h"
 #include "ppl.h"
 #include "channel.h"
@@ -857,7 +858,8 @@ bool ssh2_bpp_check_unimplemented(BinaryPacketProtocol *bpp, PktIn *pktin)
  */
 
 SeatPromptResult verify_ssh_host_key(
-    InteractionReadySeat iseat, Conf *conf, const char *host, int port,
+    InteractionReadySeat iseat, Conf *conf, LogContext *logctx,
+    const char *host, int port,
     ssh_key *key, const char *keytype, char *keystr, const char *keydisp,
     char **fingerprints, int ca_count,
     void (*callback)(void *ctx, SeatPromptResult result), void *ctx)
@@ -923,6 +925,37 @@ SeatPromptResult verify_ssh_host_key(
     int storage_status = check_stored_host_key(host, port, keytype, keystr);
     if (storage_status == 0) /* matching key was found in the cache */
         return SPR_OK;
+
+    /*
+     * The key isn't cached (or doesn't match the cache), so see what
+     * the DNS has to say about it (RFC 4255 SSHFP records). We only
+     * look now, rather than on every connection, so that a host whose
+     * key is already cached costs no extra DNS query.
+     */
+    int dns_mode = conf_get_int(conf, CONF_ssh_verify_host_key_dns);
+    SshfpResult sshfp;
+    sshfp_check(host, key, dns_mode, &sshfp);
+    if (sshfp.status != SSHFP_NOT_CHECKED && logctx) {
+        char *desc = sshfp_describe(&sshfp);
+        logevent(logctx, desc);
+        sfree(desc);
+    }
+
+    if (dns_mode == SSHFP_YES && storage_status == 1 &&
+        sshfp.status == SSHFP_MATCH && sshfp.secure) {
+        /*
+         * Like OpenSSH's VerifyHostKeyDNS=yes: an unknown key that
+         * matches a DNSSEC-validated SSHFP record is trusted. We
+         * deliberately don't extend this to a key that *contradicts*
+         * the cache; that still gets the full warning below, with
+         * the DNS result as extra evidence.
+         */
+        if (logctx)
+            logevent(logctx, "Host key accepted on the strength of a "
+                     "DNSSEC-validated SSHFP record");
+        sshfp_result_clear(&sshfp);
+        return SPR_OK;
+    }
 
     /*
      * The key is either missing from the cache, or does not match.
@@ -1016,6 +1049,33 @@ SeatPromptResult verify_ssh_host_key(
             text, SDT_DISPLAY, "%s", fingerprints[fptype_default]);
         helpctx = HELPCTX(errors_hostkey_changed);
     }
+
+    switch (sshfp.status) {
+      case SSHFP_MATCH:
+        if (sshfp.secure)
+            seat_dialog_text_append(
+                text, SDT_PARA, "This key matches an SSHFP fingerprint "
+                "record published in the DNS for this host, and the DNS "
+                "answer was DNSSEC-validated.");
+        else
+            seat_dialog_text_append(
+                text, SDT_PARA, "This key matches an SSHFP fingerprint "
+                "record published in the DNS for this host. However, the "
+                "DNS answer was not DNSSEC-validated, so this is not proof "
+                "on its own that the key is genuine.");
+        break;
+      case SSHFP_MISMATCH:
+        seat_dialog_text_append(
+            text, SDT_SCARY_HEADING, "WARNING - DNS FINGERPRINT MISMATCH!");
+        seat_dialog_text_append(
+            text, SDT_PARA, "SSHFP fingerprint records are published in "
+            "the DNS for this host (%s), and NONE of them match this key.",
+            sshfp.secure ? "DNSSEC-validated" : "not DNSSEC-validated");
+        break;
+      default:
+        break;
+    }
+    sshfp_result_clear(&sshfp);
 
     /* The above text is printed even in batch mode. Here's where we stop if
      * we can't present interactive prompts. */

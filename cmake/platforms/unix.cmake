@@ -117,6 +117,14 @@ add_optional_system_lib(m pow)
 add_optional_system_lib(rt clock_gettime)
 add_optional_system_lib(xnet socket)
 
+# The resolver (res_nquery), for SSHFP lookups. glibc and macOS keep it
+# in libresolv under different symbol names; the BSDs have it in libc.
+check_library_exists(resolv __res_ninit "" HAVE_LIBRESOLV_GLIBC)
+check_library_exists(resolv res_9_ninit "" HAVE_LIBRESOLV_APPLE)
+if(HAVE_LIBRESOLV_GLIBC OR HAVE_LIBRESOLV_APPLE)
+  link_libraries(-lresolv)
+endif()
+
 set(extra_dirs charset)
 
 if(PUTTY_GSSAPI STREQUAL DYNAMIC)

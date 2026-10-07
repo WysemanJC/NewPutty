@@ -27,6 +27,12 @@ CONF_ENUM(addressfamily,
     VALUE(ADDRTYPE_IPV6, 2),
 )
 
+CONF_ENUM(verify_host_key_dns,
+    VALUE(SSHFP_OFF, 0),
+    VALUE(SSHFP_ASK, 1),
+    VALUE(SSHFP_YES, 2),
+)
+
 CONF_ENUM(on_off_auto,
     VALUE(FORCE_ON, 0),
     VALUE(FORCE_OFF, 1),

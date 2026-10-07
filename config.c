@@ -2807,6 +2807,24 @@ void setup_config_box(struct controlbox *b, bool midsession,
         }
 
         /*
+         * Checking host keys against SSHFP records in the DNS is
+         * irrelevant mid-session, for the same reason as manual host
+         * keys below.
+         */
+        if (!midsession) {
+            s = ctrl_getset(b, "Connection/SSH/Host keys", "sshfp",
+                            "Host key fingerprints published in DNS (SSHFP)");
+            ctrl_radiobuttons(s, "Check unknown host keys against DNS:", 'd',
+                              1, HELPCTX(ssh_sshfp),
+                              conf_radiobutton_handler,
+                              I(CONF_ssh_verify_host_key_dns),
+                              "Never look up SSHFP records", I(SSHFP_OFF),
+                              "Report the result, but always ask me",
+                              I(SSHFP_ASK),
+                              "Trust a DNSSEC-validated match", I(SSHFP_YES));
+        }
+
+        /*
          * Manual host key configuration is irrelevant mid-session,
          * as we enforce that the host key for rekeys is the
          * same as that used at the start of the session.

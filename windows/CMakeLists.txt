@@ -51,7 +51,7 @@ add_sources_from_current_dir(console
 add_sources_from_current_dir(settings
   storage.c)
 add_sources_from_current_dir(network
-  network.c handle-socket.c named-pipe-client.c named-pipe-server.c local-proxy.c x11.c)
+  dns.c network.c handle-socket.c named-pipe-client.c named-pipe-server.c local-proxy.c x11.c)
 add_sources_from_current_dir(sshcommon
   noise.c)
 add_sources_from_current_dir(sshclient

@@ -410,6 +410,18 @@ enum TriState {
 
 enum {
     /*
+     * Whether to check SSH host keys against SSHFP records in the
+     * DNS (CONF_ssh_verify_host_key_dns), named after OpenSSH's
+     * VerifyHostKeyDNS. OFF never looks. ASK looks, and reports what
+     * it found in the host key prompt, but never skips the prompt.
+     * YES additionally accepts an otherwise unknown key without a
+     * prompt if it matches a DNSSEC-validated SSHFP record.
+     */
+    SSHFP_OFF, SSHFP_ASK, SSHFP_YES
+};
+
+enum {
+    /*
      * Proxy types.
      */
     PROXY_NONE, PROXY_SOCKS4, PROXY_SOCKS5,

@@ -42,7 +42,7 @@ add_sources_from_current_dir(console
 add_sources_from_current_dir(settings
   storage.c)
 add_sources_from_current_dir(network
-  network.c fd-socket.c agent-socket.c peerinfo.c local-proxy.c x11.c)
+  dns.c network.c fd-socket.c agent-socket.c peerinfo.c local-proxy.c x11.c)
 add_sources_from_current_dir(sshcommon
   noise.c)
 add_sources_from_current_dir(sshclient
@@ -268,3 +268,8 @@ add_sources_from_current_dir(test_conf unicode.c stubs/no-uxsel.c)
 add_executable(test_jsonstore
   ${CMAKE_SOURCE_DIR}/test/test_jsonstore.c)
 target_link_libraries(test_jsonstore settings utils)
+
+add_executable(test_sshfp
+  ${CMAKE_SOURCE_DIR}/test/test_sshfp.c
+  ${CMAKE_SOURCE_DIR}/ssh/sshfp.c)
+target_link_libraries(test_sshfp crypto utils)
