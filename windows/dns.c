@@ -55,9 +55,14 @@ char *dns_lookup_sshfp(const char *hostname, SshfpRecordList *out)
         if (rec->wType != DNS_TYPE_SSHFP_VALUE ||
             rec->Flags.S.Section != DnsSectionAnswer)
             continue;
-        /* Record types Windows doesn't know come back as raw RDATA. */
-        DWORD len = rec->Data.Unknown.dwByteCount;
-        const BYTE *data = rec->Data.Unknown.bData;
+        /*
+         * Record types Windows doesn't know come back as raw RDATA
+         * starting at Data itself, with its length in wDataLength.
+         * (DNS_UNKNOWN_DATA's dwByteCount is not filled in: reading
+         * it takes the first RDATA bytes as a length.)
+         */
+        DWORD len = rec->wDataLength;
+        const BYTE *data = (const BYTE *)&rec->Data;
         if (len < 3)
             continue;
         sgrowarray(out->recs, out->size, out->n);
