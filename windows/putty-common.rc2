@@ -95,4 +95,13 @@ CLASS "PuTTYConfigBox"
 BEGIN
 END
 
+/* Accelerators used: no */
+IDD_SSHFP_CONFIG DIALOG DISCARDABLE 0, 0, 260, 92
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "PuTTY DNS SSHFP settings"
+FONT 8, "MS Shell Dlg"
+CLASS "PuTTYConfigBox"
+BEGIN
+END
+
 #include "version.rc2"

@@ -89,15 +89,28 @@ as "no keys known" (so you are prompted) and is never overwritten.
 
 ## SSHFP
 
-Setting: *Connection > SSH > Host keys > Check unknown host keys against
-DNS*, saved as `VerifyHostKeyDNS`. It follows OpenSSH's option of the
-same name.
+Setting: *Connection > SSH > Host keys > DNS SSHFP Settings > Check
+unknown host keys against DNS*, saved as `VerifyHostKeyDNS`. It
+follows OpenSSH's option of the same name. The button opens a small
+modal box (like *Configure host CAs*, but editing the session being
+configured), because the Host keys panel has no room left at 640x480.
 
 | Value | Behaviour |
 |---|---|
 | 0, never | No lookup |
 | 1, ask (default) | Look up; say in the host key prompt whether the key matches |
 | 2, yes | As "ask", and an uncached key matching a DNSSEC-validated record is accepted without a prompt (and not stored) |
+
+A second setting in the same box, *Require valid SSHFP* (saved as
+`RequireSSHFP`, off by default), makes a match compulsory: SSHFP is
+looked up on **every** connection, cached keys included, and the
+connection is refused (no "accept anyway" prompt) unless the key
+matches a record. It fails closed: no records, a mismatch, a failed
+lookup, or no lookup (proxy resolving names, key type or certificate
+SSHFP can't describe) all refuse. The match need not be
+DNSSEC-validated (Windows can't tell). Manually configured host keys
+and CA-accepted certificates are not affected, as they're decided
+before the cache and DNS are consulted.
 
 Decisions made where the request didn't say:
 

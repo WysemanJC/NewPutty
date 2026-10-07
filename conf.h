@@ -207,6 +207,11 @@ CONF_OPTION(ssh_verify_host_key_dns,
     SAVE_KEYWORD("VerifyHostKeyDNS"),
     STORAGE_ENUM(verify_host_key_dns),
 )
+CONF_OPTION(ssh_require_sshfp,
+    VALUE_TYPE(BOOL),
+    DEFAULT_BOOL(false),
+    SAVE_KEYWORD("RequireSSHFP"),
+)
 CONF_OPTION(ssh_rekey_time,
     VALUE_TYPE(INT), /* in minutes */
     DEFAULT_INT(60),

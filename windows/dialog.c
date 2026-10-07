@@ -1372,3 +1372,58 @@ void show_ca_config_box(dlgparam *dp)
 
     pds_free(pds);
 }
+
+static INT_PTR SshfpConfigProc(HWND hwnd, UINT msg, WPARAM wParam,
+                               LPARAM lParam, void *ctx)
+{
+    PortableDialogStuff *pds = (PortableDialogStuff *)ctx;
+
+    switch (msg) {
+      case WM_INITDIALOG:
+        pds_initdialog_start(pds, hwnd);
+
+        SendMessage(hwnd, WM_SETICON, (WPARAM) ICON_BIG,
+                    (LPARAM) LoadIcon(hinst, MAKEINTRESOURCE(IDI_CFGICON)));
+
+        centre_window(hwnd);
+
+        /* The button row sits 17 units above the bottom, as in the CA
+         * box; IDD_SSHFP_CONFIG is 92 units high. */
+        pds_create_controls(pds, 0, IDCX_PANELBASE, 3, 3, 3, "Main");
+        pds_create_controls(pds, 0, IDCX_STDBASE, 3, 3, 75, "");
+        dlg_refresh(NULL, pds->dp);    /* and set up control values */
+
+        pds_initdialog_finish(pds);
+        return 0;
+
+      default:
+        return pds_default_dlgproc(pds, hwnd, msg, wParam, lParam);
+    }
+}
+
+void show_sshfp_config_box(dlgparam *dp, Conf *conf)
+{
+    PortableDialogStuff *pds = pds_new(1);
+
+    setup_sshfp_config_box(pds->ctrlbox);
+    pds->dp->data = conf;
+
+    /*
+     * Make the box properly modal, as DialogBox would: our controls
+     * edit the configuration box's Conf, so that box mustn't be
+     * usable (or closable) until we're done. ShinyDialogBox doesn't
+     * disable the owner itself.
+     */
+    HWND owner = dp ? dp->hwnd : NULL;
+    if (owner)
+        EnableWindow(owner, FALSE);
+
+    ShinyDialogBox(hinst, MAKEINTRESOURCE(IDD_SSHFP_CONFIG), "PuTTYConfigBox",
+                   owner, SshfpConfigProc, pds);
+
+    if (owner) {
+        EnableWindow(owner, TRUE);
+        SetActiveWindow(owner);
+    }
+    pds_free(pds);
+}

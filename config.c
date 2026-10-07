@@ -1780,6 +1780,52 @@ static void host_ca_button_handler(dlgcontrol *ctrl, dlgparam *dp,
         show_ca_config_box(dp);
 }
 
+static void sshfp_button_handler(dlgcontrol *ctrl, dlgparam *dp,
+                                 void *data, int event)
+{
+    if (event == EVENT_ACTION)
+        show_sshfp_config_box(dp, (Conf *)data);
+}
+
+static void sshfp_done_handler(dlgcontrol *ctrl, dlgparam *dp,
+                               void *data, int event)
+{
+    if (event == EVENT_ACTION)
+        dlg_end(dp, 0);
+}
+
+/*
+ * The SSHFP settings box, opened from Connection/SSH/Host keys. Its
+ * controls edit the same Conf as the main configuration box, which
+ * the platform passes in as the dialog's data.
+ */
+void setup_sshfp_config_box(struct controlbox *b)
+{
+    struct controlset *s;
+    dlgcontrol *c;
+
+    /* Action area, with the Done button in it */
+    s = ctrl_getset(b, "", "", "");
+    ctrl_columns(s, 5, 20, 20, 20, 20, 20);
+    c = ctrl_pushbutton(s, "Done", 'o', HELPCTX(ssh_sshfp),
+                        sshfp_done_handler, P(NULL));
+    c->button.isdefault = true;
+    c->button.iscancel = true;
+    c->column = 4;
+
+    s = ctrl_getset(b, "Main", "sshfp",
+                    "Host key fingerprints published in DNS (SSHFP)");
+    ctrl_radiobuttons(s, "Check unknown host keys against DNS:", 'n', 1,
+                      HELPCTX(ssh_sshfp),
+                      conf_radiobutton_handler,
+                      I(CONF_ssh_verify_host_key_dns),
+                      "Never look up SSHFP records", I(SSHFP_OFF),
+                      "Report the result, but always ask me", I(SSHFP_ASK),
+                      "Trust a DNSSEC-validated match", I(SSHFP_YES));
+    ctrl_checkbox(s, "Require valid SSHFP", 'r', HELPCTX(ssh_sshfp),
+                  conf_checkbox_handler, I(CONF_ssh_require_sshfp));
+}
+
 void setup_config_box(struct controlbox *b, bool midsession,
                       int protocol, int protcfginfo)
 {
@@ -2807,24 +2853,6 @@ void setup_config_box(struct controlbox *b, bool midsession,
         }
 
         /*
-         * Checking host keys against SSHFP records in the DNS is
-         * irrelevant mid-session, for the same reason as manual host
-         * keys below.
-         */
-        if (!midsession) {
-            s = ctrl_getset(b, "Connection/SSH/Host keys", "sshfp",
-                            "Host key fingerprints published in DNS (SSHFP)");
-            ctrl_radiobuttons(s, "Check unknown host keys against DNS:", 'n',
-                              1, HELPCTX(ssh_sshfp),
-                              conf_radiobutton_handler,
-                              I(CONF_ssh_verify_host_key_dns),
-                              "Never look up SSHFP records", I(SSHFP_OFF),
-                              "Report the result, but always ask me",
-                              I(SSHFP_ASK),
-                              "Trust a DNSSEC-validated match", I(SSHFP_YES));
-        }
-
-        /*
          * Manual host key configuration is irrelevant mid-session,
          * as we enforce that the host key for rekeys is the
          * same as that used at the start of the session.
@@ -2877,6 +2905,19 @@ void setup_config_box(struct controlbox *b, bool midsession,
         c = ctrl_pushbutton(s, "Configure host CAs", NO_SHORTCUT,
                             HELPCTX(ssh_kex_cert),
                             host_ca_button_handler, I(0));
+
+        /*
+         * Checking host keys against SSHFP records in the DNS is
+         * irrelevant mid-session, for the same reason as manual host
+         * keys above. The settings live in a box of their own, since
+         * this panel has no room for them.
+         */
+        if (!midsession) {
+            s = ctrl_getset(b, "Connection/SSH/Host keys", "", NULL);
+            c = ctrl_pushbutton(s, "DNS SSHFP Settings", 'n',
+                                HELPCTX(ssh_sshfp),
+                                sshfp_button_handler, I(0));
+        }
 
         if (!midsession || !(protcfginfo == 1 || protcfginfo == -1)) {
             /*

@@ -2523,9 +2523,12 @@ void setup_config_box(struct controlbox *b, bool midsession,
                       int protocol, int protcfginfo);
 
 void setup_ca_config_box(struct controlbox *b);
+void setup_sshfp_config_box(struct controlbox *b);
 
 /* Platforms provide this to be called from config.c */
 void show_ca_config_box(dlgparam *dlg);
+/* Modal box from setup_sshfp_config_box, whose controls edit 'conf' */
+void show_sshfp_config_box(dlgparam *dlg, Conf *conf);
 extern const bool has_ca_config_box; /* false if, e.g., we're PuTTYtel */
 
 /* Visible outside config.c so that platforms can use it to recognise

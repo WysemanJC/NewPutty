@@ -876,6 +876,7 @@ struct HostKeyVerify {
     int ca_count;
     int storage_status;
     int dns_mode;
+    bool require_sshfp;
     SshfpCheck *sshfp;
     HostKeyVerify **pending;
     void (*callback)(void *ctx, SeatPromptResult result);
@@ -992,13 +993,16 @@ SeatPromptResult verify_ssh_host_key(
      * Next, check the host key cache.
      */
     int storage_status = check_stored_host_key(host, port, keytype, keystr);
-    if (storage_status == 0) /* matching key was found in the cache */
-        return SPR_OK;
+    bool require_sshfp = conf_get_bool(conf, CONF_ssh_require_sshfp);
+    if (storage_status == 0 && !require_sshfp)
+        return SPR_OK;      /* matching key was found in the cache */
 
     /*
-     * The key is either missing from the cache, or does not match.
-     * Either way, we'll prompt; keep what the prompt needs, since the
-     * caller's copies may be gone by the time a DNS lookup finishes.
+     * Either the key is missing from the cache or doesn't match it,
+     * so we'll prompt, or the user requires an SSHFP match on every
+     * connection, so we must look it up even for a cached key. Keep
+     * what we need, since the caller's copies may be gone by the time
+     * a DNS lookup finishes.
      */
     HostKeyVerify *v = snew(HostKeyVerify);
     memset(v, 0, sizeof(*v));
@@ -1015,24 +1019,31 @@ SeatPromptResult verify_ssh_host_key(
     v->ca_count = ca_count;
     v->storage_status = storage_status;
     v->dns_mode = conf_get_int(conf, CONF_ssh_verify_host_key_dns);
+    v->require_sshfp = require_sshfp;
     v->pending = pending;
     v->callback = callback;
     v->ctx = ctx;
 
     /*
      * First see what the DNS has to say about the key (RFC 4255 SSHFP
-     * records). We only look now, rather than on every connection,
-     * so that a host whose key is already cached costs no extra DNS
-     * query. If a proxy is doing our DNS lookups, don't make one
-     * here: that would tell the local resolver where we're going.
+     * records). Unless an SSHFP match is required, we only look now,
+     * rather than on every connection, so that a host whose key is
+     * already cached costs no extra DNS query. Requiring a match
+     * implies looking, whatever the lookup setting says.
+     *
+     * If a proxy is doing our DNS lookups, don't make one here: that
+     * would tell the local resolver where we're going.
      */
-    if (v->dns_mode != SSHFP_OFF &&
+    int lookup_mode = v->dns_mode;
+    if (require_sshfp && lookup_mode == SSHFP_OFF)
+        lookup_mode = SSHFP_ASK;
+    if (lookup_mode != SSHFP_OFF &&
         proxy_will_resolve_hostname(host, port, conf)) {
         if (logctx)
             logevent(logctx, "SSHFP: not checked, because host name "
                      "lookups are left to the proxy");
     } else {
-        v->sshfp = sshfp_check_start(host, key, v->dns_mode,
+        v->sshfp = sshfp_check_start(host, key, lookup_mode,
                                      hkv_sshfp_done, v);
     }
     if (v->sshfp) {
@@ -1063,6 +1074,26 @@ static SeatPromptResult hkv_prompt(HostKeyVerify *v,
         char *desc = sshfp_describe(sshfp);
         logevent(v->logctx, desc);
         sfree(desc);
+    }
+
+    if (v->require_sshfp) {
+        /*
+         * The user has said never to trust a host key that no SSHFP
+         * record vouches for. This fails closed: a failed lookup, no
+         * records, a mismatch, or no lookup at all (a proxy resolving
+         * names, a key type or host SSHFP can't describe) all refuse
+         * the key, without offering to accept it anyway.
+         */
+        if (sshfp->status != SSHFP_MATCH) {
+            if (v->logctx)
+                logevent(v->logctx, "Host key rejected: \"Require valid "
+                         "SSHFP\" is set and no SSHFP record matches it");
+            return SPR_SW_ABORT("Host key rejected: \"Require valid SSHFP\" "
+                                "is set and no SSHFP record in the DNS "
+                                "matches it");
+        }
+        if (storage_status == 0)
+            return SPR_OK;  /* cached, and the DNS agrees */
     }
 
     if (v->dns_mode == SSHFP_YES && storage_status == 1 &&

@@ -2661,6 +2661,10 @@ from the cached key), it can look these records up and use them as
 evidence about whether the key is genuine. If the key is already
 cached and matches, no lookup is made.
 
+These settings are in a box of their own: press \q{DNS SSHFP
+Settings} at the bottom of the Host keys panel. (They aren't available
+in mid-session reconfiguration.)
+
 \b \q{Never look up SSHFP records}: PuTTY makes no DNS query.
 
 \b \q{Report the result, but always ask me} (the default): PuTTY
@@ -2672,6 +2676,19 @@ not cached and matches an SSHFP record in a DNS answer that was
 \i{DNSSEC}-validated, PuTTY accepts the key without asking. It does not
 store it in the host key cache. A key that contradicts the cache
 always produces the usual warning.
+
+\q{Require valid SSHFP} makes the check compulsory. PuTTY then looks
+up SSHFP records on every connection, including for host keys it has
+already cached, and refuses to connect unless the server's key
+matches one of them. Anything else fails the check: no records, only
+non-matching records, a failed lookup, or no lookup at all (because a
+proxy resolves host names, or the server presented a key type or
+certificate that SSHFP can't describe). PuTTY does not offer to accept
+the key anyway. A match need not be DNSSEC-validated. This option
+applies even if the setting above is \q{Never look up SSHFP records}.
+Host keys configured manually (\k{config-ssh-kex-manual-hostkeys}) and
+certificates accepted through a trusted certification authority are
+not affected.
 
 A DNS answer counts as validated only if the system's resolver says so
 (the AD bit). PuTTY cannot check that claim itself, so it is only as
