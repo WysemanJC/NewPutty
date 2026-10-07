@@ -473,8 +473,13 @@ int check_stored_host_key(const char *hostname, int port,
         /*
          * Treat an unreadable cache as "key not known", so that the
          * user is prompted rather than silently trusting anything.
+         *
+         * Don't report the error here: we're called in the middle of
+         * handling network data, where a modal message box would let
+         * the GUI's message loop re-enter the SSH code. If the user
+         * accepts the key, store_host_key reports the problem through
+         * the Seat, as it refuses to overwrite a cache it can't read.
          */
-        nonfatal("Unable to read host key cache: %s", err);
         sfree(err);
     }
     if (!doc)

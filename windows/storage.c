@@ -99,7 +99,14 @@ char *platform_make_dir(const char *path)
 strbuf *platform_read_file(const char *path)
 {
     wchar_t *w = wpath(path);
-    HANDLE h = CreateFileW(w, GENERIC_READ, FILE_SHARE_READ, NULL,
+    /*
+     * Share everything, so that another PuTTY replacing this file
+     * (platform_write_file's MoveFileEx) doesn't fail just because we
+     * happen to be reading it at the same moment.
+     */
+    HANDLE h = CreateFileW(w, GENERIC_READ,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE |
+                           FILE_SHARE_DELETE, NULL,
                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     sfree(w);
     if (h == INVALID_HANDLE_VALUE)
@@ -138,9 +145,15 @@ char *platform_write_file(const char *path, const void *data, size_t len)
 
     const char *p = data;
     while (len > 0 && !err) {
-        DWORD chunk = len > 0x10000000 ? 0x10000000 : (DWORD)len, done;
-        if (!WriteFile(h, p, chunk, &done, NULL))
+        DWORD chunk = len > 0x10000000 ? 0x10000000 : (DWORD)len, done = 0;
+        if (!WriteFile(h, p, chunk, &done, NULL)) {
             err = win_error("WriteFile", tmppath);
+            break;
+        }
+        if (done == 0) {
+            err = dupprintf("Unable to write to %s", tmppath);
+            break;
+        }
         p += done;
         len -= done;
     }
