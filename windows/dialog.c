@@ -1372,3 +1372,92 @@ void show_ca_config_box(dlgparam *dp)
 
     pds_free(pds);
 }
+
+static INT_PTR SshfpConfigProc(HWND hwnd, UINT msg, WPARAM wParam,
+                               LPARAM lParam, void *ctx)
+{
+    PortableDialogStuff *pds = (PortableDialogStuff *)ctx;
+
+    switch (msg) {
+      case WM_INITDIALOG:
+        pds_initdialog_start(pds, hwnd);
+
+        SendMessage(hwnd, WM_SETICON, (WPARAM) ICON_BIG,
+                    (LPARAM) LoadIcon(hinst, MAKEINTRESOURCE(IDI_CFGICON)));
+
+        centre_window(hwnd);
+
+        /* The button row sits 17 units above the bottom, as in the CA
+         * box; IDD_SSHFP_CONFIG is 92 units high. */
+        pds_create_controls(pds, 0, IDCX_PANELBASE, 3, 3, 3, "Main");
+        pds_create_controls(pds, 0, IDCX_STDBASE, 3, 3, 75, "");
+        dlg_refresh(NULL, pds->dp);    /* and set up control values */
+
+        pds_initdialog_finish(pds);
+        return 0;
+
+      default:
+        return pds_default_dlgproc(pds, hwnd, msg, wParam, lParam);
+    }
+}
+
+void show_sshfp_config_box(dlgparam *dp, Conf *conf)
+{
+    PortableDialogStuff *pds = pds_new(1);
+
+    setup_sshfp_config_box(pds->ctrlbox);
+    pds->dp->data = conf;
+
+    /*
+     * Make the box properly modal, as DialogBox would: our controls
+     * edit the configuration box's Conf, so that box mustn't be
+     * usable (or closable) until we're done. ShinyDialogBox doesn't
+     * disable the owner itself.
+     */
+    HWND owner = dp ? dp->hwnd : NULL;
+    if (owner)
+        EnableWindow(owner, FALSE);
+
+    ShinyDialogBox(hinst, MAKEINTRESOURCE(IDD_SSHFP_CONFIG), "PuTTYConfigBox",
+                   owner, SshfpConfigProc, pds);
+
+    if (owner) {
+        EnableWindow(owner, TRUE);
+        SetActiveWindow(owner);
+    }
+    pds_free(pds);
+}
+
+void dlg_import_file_prompt(dlgparam *dp, dlg_import_done_fn done,
+                            void *ctx)
+{
+    wchar_t path[4096] = L"";
+    OPENFILENAMEW of;
+
+    memset(&of, 0, sizeof(of));
+    of.lStructSize = sizeof(of);
+    of.hwndOwner = dp->hwnd;
+    of.lpstrFilter = L"Registry export files (*.reg)\0*.reg\0"
+        L"All Files (*.*)\0*\0\0";
+    of.nFilterIndex = 1;
+    of.lpstrFile = path;
+    of.nMaxFile = lenof(path);
+    of.lpstrTitle = L"Import PuTTY settings from a registry export";
+    /* OFN_DONTADDTORECENT: don't let Windows record the file in the
+     * registry's recent-documents lists on our behalf. */
+    of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY |
+        OFN_NOCHANGEDIR | OFN_DONTADDTORECENT;
+
+    if (!GetOpenFileNameW(&of))
+        return;                        /* cancelled */
+
+    Filename *fn = filename_from_wstr(path);
+    done(dp, fn, ctx);
+    filename_free(fn);
+}
+
+void dlg_import_report(dlgparam *dp, const char *msg, bool success)
+{
+    MessageBox(dp->hwnd, msg, "PuTTY: import from registry export",
+               MB_OK | (success ? MB_ICONINFORMATION : MB_ICONWARNING));
+}

@@ -35,6 +35,7 @@ add_sources_from_current_dir(utils
   encode_utf8.c
   encode_wide_string_as_utf8.c
   fgetline.c
+  json.c
   format_connection_setup_command.c
   host_ca_new_free.c
   host_strchr.c

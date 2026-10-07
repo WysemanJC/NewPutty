@@ -6,6 +6,7 @@ add_library(sshcommon OBJECT
   censor1.c
   censor2.c
   common.c
+  sshfp.c
   connection1.c
   connection2.c
   crc-attack-detector.c

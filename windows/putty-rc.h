@@ -16,6 +16,7 @@
 #define IDD_HOSTKEY      114
 #define IDD_HK_MOREINFO  116
 #define IDD_CA_CONFIG    117
+#define IDD_SSHFP_CONFIG 118
 
 #define IDN_LIST        1001
 #define IDN_COPY        1002

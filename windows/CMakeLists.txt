@@ -51,7 +51,7 @@ add_sources_from_current_dir(console
 add_sources_from_current_dir(settings
   storage.c)
 add_sources_from_current_dir(network
-  network.c handle-socket.c named-pipe-client.c named-pipe-server.c local-proxy.c x11.c)
+  dns.c network.c handle-socket.c named-pipe-client.c named-pipe-server.c local-proxy.c x11.c)
 add_sources_from_current_dir(sshcommon
   noise.c)
 add_sources_from_current_dir(sshclient
@@ -80,10 +80,11 @@ add_library(guimisc STATIC
 add_executable(pageant
   pageant.c
   help.c
+  no-jump-list.c
   pageant.rc)
 add_dependencies(pageant generated_licence_h)
 target_link_libraries(pageant
-  guimisc eventloop agent network crypto utils
+  guimisc eventloop agent settings network crypto utils
   ${platform_libraries})
 set_target_properties(pageant PROPERTIES WIN32_EXECUTABLE ON)
 installed_program(pageant)
@@ -140,6 +141,7 @@ add_executable(puttygen
   noise.c
   no-jump-list.c
   storage.c
+  ${CMAKE_SOURCE_DIR}/jsonstore.c
   help.c
   ${CMAKE_SOURCE_DIR}/sshpubk.c
   ${CMAKE_SOURCE_DIR}/sshrand.c
@@ -206,3 +208,8 @@ target_link_libraries(test_terminal
   guiterminal settings eventloop utils ${platform_libraries})
 
 add_sources_from_current_dir(test_conf no-jump-list.c handle-wait.c)
+
+add_executable(test_regimport
+  ${CMAKE_SOURCE_DIR}/test/test_regimport.c
+  no-jump-list.c)
+target_link_libraries(test_regimport settings utils ${platform_libraries})

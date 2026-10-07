@@ -10,6 +10,7 @@
 #include "mpint.h"
 #include "ssh.h"
 #include "storage.h"
+#include "sshfp.h"
 #include "bpp.h"
 #include "ppl.h"
 #include "channel.h"
@@ -854,13 +855,84 @@ bool ssh2_bpp_check_unimplemented(BinaryPacketProtocol *bpp, PktIn *pktin)
  * host key is already known. If so, it returns success on its own
  * account; otherwise, it calls out to the Seat to give an interactive
  * prompt (the nature of which varies depending on the Seat itself).
+ *
+ * Before prompting about a key that isn't cached, it may look the
+ * host up in the DNS for SSHFP records. That lookup runs in the
+ * background, so in that case verify_ssh_host_key returns
+ * SPR_INCOMPLETE straight away, keeps what it needs for the prompt in
+ * a HostKeyVerify, and stores that in *pending until the lookup is
+ * done. The caller must pass *pending to verify_ssh_host_key_cancel
+ * if it's freed in the meantime.
  */
 
+struct HostKeyVerify {
+    InteractionReadySeat iseat;
+    LogContext *logctx;
+    char *host;
+    int port;
+    bool is_certificate;
+    char *keytype, *keystr, *keydisp;
+    char *fingerprints[SSH_N_FPTYPES];
+    int ca_count;
+    int storage_status;
+    int dns_mode;
+    bool require_sshfp;
+    SshfpCheck *sshfp;
+    HostKeyVerify **pending;
+    void (*callback)(void *ctx, SeatPromptResult result);
+    void *ctx;
+};
+
+static void hkv_free(HostKeyVerify *v)
+{
+    sfree(v->host);
+    sfree(v->keytype);
+    sfree(v->keystr);
+    sfree(v->keydisp);
+    for (size_t i = 0; i < SSH_N_FPTYPES; i++)
+        sfree(v->fingerprints[i]);
+    sfree(v);
+}
+
+static SeatPromptResult hkv_prompt(HostKeyVerify *v,
+                                   const SshfpResult *sshfp);
+
+static void hkv_sshfp_done(void *vctx, const SshfpResult *sshfp)
+{
+    HostKeyVerify *v = (HostKeyVerify *)vctx;
+    v->sshfp = NULL;                   /* it frees itself */
+    *v->pending = NULL;
+
+    SeatPromptResult spr = hkv_prompt(v, sshfp);
+    void (*callback)(void *ctx, SeatPromptResult result) = v->callback;
+    void *ctx = v->ctx;
+    hkv_free(v);
+
+    /*
+     * If the Seat answered at once (e.g. batch mode), pass that on;
+     * otherwise it will call the callback itself when the user does.
+     */
+    if (spr.kind != SPRK_INCOMPLETE)
+        callback(ctx, spr);
+}
+
+void verify_ssh_host_key_cancel(HostKeyVerify **pending)
+{
+    HostKeyVerify *v = *pending;
+    if (!v)
+        return;
+    sshfp_check_cancel(v->sshfp);
+    hkv_free(v);
+    *pending = NULL;
+}
+
 SeatPromptResult verify_ssh_host_key(
-    InteractionReadySeat iseat, Conf *conf, const char *host, int port,
+    InteractionReadySeat iseat, Conf *conf, LogContext *logctx,
+    const char *host, int port,
     ssh_key *key, const char *keytype, char *keystr, const char *keydisp,
     char **fingerprints, int ca_count,
-    void (*callback)(void *ctx, SeatPromptResult result), void *ctx)
+    void (*callback)(void *ctx, SeatPromptResult result), void *ctx,
+    HostKeyVerify **pending)
 {
     /*
      * First, check if the Conf includes a manual specification of the
@@ -921,13 +993,124 @@ SeatPromptResult verify_ssh_host_key(
      * Next, check the host key cache.
      */
     int storage_status = check_stored_host_key(host, port, keytype, keystr);
-    if (storage_status == 0) /* matching key was found in the cache */
-        return SPR_OK;
+    bool require_sshfp = conf_get_bool(conf, CONF_ssh_require_sshfp);
+    if (storage_status == 0 && !require_sshfp)
+        return SPR_OK;      /* matching key was found in the cache */
 
     /*
-     * The key is either missing from the cache, or does not match.
-     * Either way, fall back to an interactive prompt from the Seat.
+     * Either the key is missing from the cache or doesn't match it,
+     * so we'll prompt, or the user requires an SSHFP match on every
+     * connection, so we must look it up even for a cached key. Keep
+     * what we need, since the caller's copies may be gone by the time
+     * a DNS lookup finishes.
      */
+    HostKeyVerify *v = snew(HostKeyVerify);
+    memset(v, 0, sizeof(*v));
+    v->iseat = iseat;
+    v->logctx = logctx;
+    v->host = dupstr(host);
+    v->port = port;
+    v->is_certificate = key && ssh_key_alg(key)->is_certificate;
+    v->keytype = dupstr(keytype);
+    v->keystr = dupstr(keystr);
+    v->keydisp = dupstr(keydisp);
+    for (size_t i = 0; i < SSH_N_FPTYPES; i++)
+        v->fingerprints[i] = dupstr(fingerprints[i]);
+    v->ca_count = ca_count;
+    v->storage_status = storage_status;
+    v->dns_mode = conf_get_int(conf, CONF_ssh_verify_host_key_dns);
+    v->require_sshfp = require_sshfp;
+    v->pending = pending;
+    v->callback = callback;
+    v->ctx = ctx;
+
+    /*
+     * First see what the DNS has to say about the key (RFC 4255 SSHFP
+     * records). Unless an SSHFP match is required, we only look now,
+     * rather than on every connection, so that a host whose key is
+     * already cached costs no extra DNS query. Requiring a match
+     * implies looking, whatever the lookup setting says.
+     *
+     * If a proxy is doing our DNS lookups, don't make one here: that
+     * would tell the local resolver where we're going.
+     */
+    int lookup_mode = v->dns_mode;
+    if (require_sshfp && lookup_mode == SSHFP_OFF)
+        lookup_mode = SSHFP_ASK;
+    if (lookup_mode != SSHFP_OFF &&
+        proxy_will_resolve_hostname(host, port, conf)) {
+        if (logctx)
+            logevent(logctx, "SSHFP: not checked, because host name "
+                     "lookups are left to the proxy");
+    } else {
+        v->sshfp = sshfp_check_start(host, key, lookup_mode,
+                                     hkv_sshfp_done, v);
+    }
+    if (v->sshfp) {
+        *pending = v;
+        return SPR_INCOMPLETE;
+    }
+
+    SshfpResult not_checked = { SSHFP_NOT_CHECKED, false, NULL };
+    SeatPromptResult spr = hkv_prompt(v, &not_checked);
+    hkv_free(v);
+    return spr;
+}
+
+static SeatPromptResult hkv_prompt(HostKeyVerify *v,
+                                   const SshfpResult *sshfp)
+{
+    InteractionReadySeat iseat = v->iseat;
+    const char *host = v->host;
+    int port = v->port;
+    const char *keytype = v->keytype;
+    char *keystr = v->keystr;
+    const char *keydisp = v->keydisp;
+    char **fingerprints = v->fingerprints;
+    int ca_count = v->ca_count;
+    int storage_status = v->storage_status;
+
+    if (sshfp->status != SSHFP_NOT_CHECKED && v->logctx) {
+        char *desc = sshfp_describe(sshfp);
+        logevent(v->logctx, desc);
+        sfree(desc);
+    }
+
+    if (v->require_sshfp) {
+        /*
+         * The user has said never to trust a host key that no SSHFP
+         * record vouches for. This fails closed: a failed lookup, no
+         * records, a mismatch, or no lookup at all (a proxy resolving
+         * names, a key type or host SSHFP can't describe) all refuse
+         * the key, without offering to accept it anyway.
+         */
+        if (sshfp->status != SSHFP_MATCH) {
+            if (v->logctx)
+                logevent(v->logctx, "Host key rejected: \"Require valid "
+                         "SSHFP\" is set and no SSHFP record matches it");
+            return SPR_SW_ABORT("Host key rejected: \"Require valid SSHFP\" "
+                                "is set and no SSHFP record in the DNS "
+                                "matches it");
+        }
+        if (storage_status == 0)
+            return SPR_OK;  /* cached, and the DNS agrees */
+    }
+
+    if (v->dns_mode == SSHFP_YES && storage_status == 1 &&
+        sshfp->status == SSHFP_MATCH && sshfp->secure) {
+        /*
+         * Like OpenSSH's VerifyHostKeyDNS=yes: an unknown key that
+         * matches a DNSSEC-validated SSHFP record is trusted. We
+         * deliberately don't extend this to a key that *contradicts*
+         * the cache; that still gets the full warning below, with
+         * the DNS result as extra evidence.
+         */
+        if (v->logctx)
+            logevent(v->logctx, "Host key accepted on the strength of a "
+                     "DNSSEC-validated SSHFP record");
+        return SPR_OK;
+    }
+
     SeatDialogText *text = seat_dialog_text_new();
     const SeatDialogPromptDescriptions *pds =
         seat_prompt_descriptions(iseat.seat);
@@ -940,7 +1123,7 @@ SeatPromptResult verify_ssh_host_key(
 
     HelpCtx helpctx;
 
-    if (key && ssh_key_alg(key)->is_certificate) {
+    if (v->is_certificate) {
         seat_dialog_text_append(
             text, SDT_SCARY_HEADING, "WARNING - POTENTIAL SECURITY BREACH!");
         seat_dialog_text_append(
@@ -1017,6 +1200,32 @@ SeatPromptResult verify_ssh_host_key(
         helpctx = HELPCTX(errors_hostkey_changed);
     }
 
+    switch (sshfp->status) {
+      case SSHFP_MATCH:
+        if (sshfp->secure)
+            seat_dialog_text_append(
+                text, SDT_PARA, "This key matches an SSHFP fingerprint "
+                "record published in the DNS for this host, and the DNS "
+                "answer was DNSSEC-validated.");
+        else
+            seat_dialog_text_append(
+                text, SDT_PARA, "This key matches an SSHFP fingerprint "
+                "record published in the DNS for this host. However, the "
+                "DNS answer was not DNSSEC-validated, so this is not proof "
+                "on its own that the key is genuine.");
+        break;
+      case SSHFP_MISMATCH:
+        seat_dialog_text_append(
+            text, SDT_SCARY_HEADING, "WARNING - DNS FINGERPRINT MISMATCH!");
+        seat_dialog_text_append(
+            text, SDT_PARA, "SSHFP fingerprint records are published in "
+            "the DNS for this host (%s), and NONE of them match this key.",
+            sshfp->secure ? "DNSSEC-validated" : "not DNSSEC-validated");
+        break;
+      default:
+        break;
+    }
+
     /* The above text is printed even in batch mode. Here's where we stop if
      * we can't present interactive prompts. */
     seat_dialog_text_append(
@@ -1027,7 +1236,7 @@ SeatPromptResult verify_ssh_host_key(
             text, SDT_PARA, "If you trust this host, %s to add the key to "
             "%s's cache and carry on connecting.",
             pds->hk_accept_action, appname);
-        if (key && ssh_key_alg(key)->is_certificate) {
+        if (v->is_certificate) {
             seat_dialog_text_append(
                 text, SDT_PARA, "(Storing this certified key in the cache "
                 "will NOT cause its certification authority to be trusted "
@@ -1047,7 +1256,7 @@ SeatPromptResult verify_ssh_host_key(
             text, SDT_PARA, "If you were expecting this change and trust the "
             "new key, %s to update %s's cache and carry on connecting.",
             pds->hk_accept_action, appname);
-        if (key && ssh_key_alg(key)->is_certificate) {
+        if (v->is_certificate) {
             seat_dialog_text_append(
                 text, SDT_PARA, "(Storing this certified key in the cache "
                 "will NOT cause its certification authority to be trusted "
@@ -1080,7 +1289,8 @@ SeatPromptResult verify_ssh_host_key(
     }
 
     SeatPromptResult toret = seat_confirm_ssh_host_key(
-        iseat, host, port, keytype, keystr, text, helpctx, callback, ctx);
+        iseat, host, port, keytype, keystr, text, helpctx,
+        v->callback, v->ctx);
     seat_dialog_text_free(text);
     return toret;
 }

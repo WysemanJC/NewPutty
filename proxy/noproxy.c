@@ -17,6 +17,11 @@ SockAddr *name_lookup(const char *host, int port, char **canonicalname,
     return sk_namelookup(host, canonicalname, addressfamily);
 }
 
+bool proxy_will_resolve_hostname(const char *host, int port, Conf *conf)
+{
+    return false;
+}
+
 Socket *new_connection(SockAddr *addr, const char *hostname,
                        int port, bool privport,
                        bool oobinline, bool nodelay, bool keepalive,

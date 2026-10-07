@@ -410,6 +410,18 @@ enum TriState {
 
 enum {
     /*
+     * Whether to check SSH host keys against SSHFP records in the
+     * DNS (CONF_ssh_verify_host_key_dns), named after OpenSSH's
+     * VerifyHostKeyDNS. OFF never looks. ASK looks, and reports what
+     * it found in the host key prompt, but never skips the prompt.
+     * YES additionally accepts an otherwise unknown key without a
+     * prompt if it matches a DNSSEC-validated SSHFP record.
+     */
+    SSHFP_OFF, SSHFP_ASK, SSHFP_YES
+};
+
+enum {
+    /*
      * Proxy types.
      */
     PROXY_NONE, PROXY_SOCKS4, PROXY_SOCKS5,
@@ -2511,9 +2523,24 @@ void setup_config_box(struct controlbox *b, bool midsession,
                       int protocol, int protcfginfo);
 
 void setup_ca_config_box(struct controlbox *b);
+void setup_sshfp_config_box(struct controlbox *b);
 
 /* Platforms provide this to be called from config.c */
 void show_ca_config_box(dlgparam *dlg);
+/* Modal box from setup_sshfp_config_box, whose controls edit 'conf' */
+void show_sshfp_config_box(dlgparam *dlg, Conf *conf);
+/*
+ * Ask the user for a registry export (.reg) to import. If they choose
+ * one, 'done' is called with it (now or later, from the event loop);
+ * the Filename is only valid during that call. If they cancel, 'done'
+ * isn't called.
+ */
+typedef void (*dlg_import_done_fn)(dlgparam *dlg, const Filename *fn,
+                                   void *ctx);
+void dlg_import_file_prompt(dlgparam *dlg, dlg_import_done_fn done,
+                            void *ctx);
+/* Show the summary of an import (as information, or as a warning). */
+void dlg_import_report(dlgparam *dlg, const char *msg, bool success);
 extern const bool has_ca_config_box; /* false if, e.g., we're PuTTYtel */
 
 /* Visible outside config.c so that platforms can use it to recognise

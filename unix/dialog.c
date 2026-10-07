@@ -4422,3 +4422,155 @@ void show_ca_config_box_synchronously(void)
     cacfg->quit_main = true;
     gtk_main();
 }
+
+/*
+ * The SSHFP settings box. Unlike the CA box, its controls edit the
+ * Conf of the configuration box that opened it, so it is modal: the
+ * user can't close (and free) that Conf while it's still open.
+ */
+struct sshfp_config_box {
+    GtkWidget *window;
+    struct controlbox *cb;
+    struct Shortcuts scs;
+    dlgparam dp;
+};
+
+static void sshfpcfg_destroy(GtkWidget *widget, gpointer data)
+{
+    struct sshfp_config_box *sc = (struct sshfp_config_box *)data;
+    dlg_cleanup(&sc->dp);
+    ctrl_free_box(sc->cb);
+    sfree(sc);
+}
+
+void show_sshfp_config_box(dlgparam *parent, Conf *conf)
+{
+    struct sshfp_config_box *sc = snew(struct sshfp_config_box);
+    memset(sc, 0, sizeof(*sc));
+
+    dlg_init(&sc->dp);
+    for (size_t i = 0; i < lenof(sc->scs.sc); i++)
+        sc->scs.sc[i].action = SHORTCUT_EMPTY;
+
+    sc->cb = ctrl_new_box();
+    setup_sshfp_config_box(sc->cb);
+
+    sc->window = our_dialog_new();
+    gtk_window_set_title(GTK_WINDOW(sc->window), "PuTTY DNS SSHFP settings");
+
+    for (int i = 0; i < sc->cb->nctrlsets; i++) {
+        struct controlset *s = sc->cb->ctrlsets[i];
+        GtkWidget *w = layout_ctrls(&sc->dp, NULL, &sc->scs, s,
+                                    GTK_WINDOW(sc->window));
+        gtk_container_set_border_width(GTK_CONTAINER(w), 10);
+        gtk_widget_show(w);
+
+        if (!*s->pathname) {
+            our_dialog_set_action_area(GTK_WINDOW(sc->window), w);
+        } else {
+            our_dialog_add_to_content_area(GTK_WINDOW(sc->window), w,
+                                           true, true, 0);
+        }
+    }
+
+    sc->dp.data = conf;
+    sc->dp.shortcuts = &sc->scs;
+    sc->dp.lastfocus = NULL;
+    sc->dp.retval = 0;
+    sc->dp.window = sc->window;
+
+    dlg_refresh(NULL, &sc->dp);
+
+    gtk_window_set_modal(GTK_WINDOW(sc->window), true);
+    if (parent && parent->window) {
+        gtk_window_set_transient_for(GTK_WINDOW(sc->window),
+                                     GTK_WINDOW(parent->window));
+        set_transient_window_pos(parent->window, sc->window);
+    } else {
+        gtk_window_set_position(GTK_WINDOW(sc->window), GTK_WIN_POS_CENTER);
+    }
+    gtk_widget_show(sc->window);
+
+    g_signal_connect(G_OBJECT(sc->window), "destroy",
+                     G_CALLBACK(sshfpcfg_destroy), sc);
+    g_signal_connect(G_OBJECT(sc->window), "key_press_event",
+                     G_CALLBACK(win_key_press), &sc->dp);
+}
+
+/*
+ * Choosing a registry export to import (the Import button on the
+ * Session panel).
+ */
+struct import_prompt {
+    dlgparam *dp;
+    dlg_import_done_fn done;
+    void *ctx;
+};
+
+#ifdef USE_GTK_FILE_CHOOSER_DIALOG
+static void import_chooser_response(GtkDialog *dialog, int response,
+                                    gpointer data)
+{
+    struct import_prompt *ip = (struct import_prompt *)data;
+    Filename *fn = NULL;
+
+    if (response == GTK_RESPONSE_ACCEPT) {
+        gchar *path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+        if (path) {
+            fn = filename_from_str(path);
+            g_free(path);
+        }
+    }
+    gtk_widget_destroy(GTK_WIDGET(dialog));
+    if (fn) {
+        ip->done(ip->dp, fn, ip->ctx);
+        filename_free(fn);
+    }
+    sfree(ip);
+}
+#endif
+
+void dlg_import_file_prompt(dlgparam *dp, dlg_import_done_fn done,
+                            void *ctx)
+{
+#ifdef USE_GTK_FILE_CHOOSER_DIALOG
+    struct import_prompt *ip = snew(struct import_prompt);
+    ip->dp = dp;
+    ip->done = done;
+    ip->ctx = ctx;
+
+    GtkWidget *fc = gtk_file_chooser_dialog_new(
+        "Import PuTTY settings from a registry export",
+        GTK_WINDOW(dp->window), GTK_FILE_CHOOSER_ACTION_OPEN,
+        STANDARD_CANCEL_LABEL, GTK_RESPONSE_CANCEL,
+        STANDARD_OPEN_LABEL, GTK_RESPONSE_ACCEPT,
+        (const gchar *)NULL);
+
+    GtkFileFilter *filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "Registry export files (*.reg)");
+    gtk_file_filter_add_pattern(filter, "*.reg");
+    gtk_file_filter_add_pattern(filter, "*.REG");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(fc), filter);
+    filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "All files");
+    gtk_file_filter_add_pattern(filter, "*");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(fc), filter);
+
+    gtk_window_set_modal(GTK_WINDOW(fc), true);
+    g_signal_connect(G_OBJECT(fc), "response",
+                     G_CALLBACK(import_chooser_response), ip);
+    gtk_widget_show(fc);
+#else
+    dlg_error_msg(dp, "Importing settings needs GTK 2.4 or later.");
+#endif
+}
+
+void dlg_import_report(dlgparam *dp, const char *msg, bool success)
+{
+    create_message_box(
+        dp->window, success ? "PuTTY: import complete" :
+        "PuTTY: import finished with problems", msg,
+        string_width("Saved sessions: 999 imported, 999 already existed "
+                     "(left unchanged)"),
+        true, &buttons_ok, trivial_post_dialog_fn, NULL);
+}

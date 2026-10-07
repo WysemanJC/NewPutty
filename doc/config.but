@@ -115,16 +115,26 @@ name in the list box.
 \b To delete a saved session: single-click to select the session
 name in the list box, and then press the \q{Delete} button.
 
+\b To \i{import} settings from a standard PuTTY installation, which
+keeps them in the Windows \i{Registry}: export the registry key
+\c{HKEY_CURRENT_USER\\Software\\SimonTatham\\PuTTY} to a \c{.reg} file
+(in Registry Editor, right-click the key and choose \q{Export}), then
+press the \q{Import} button and choose that file. PuTTY imports the
+saved sessions, the SSH host key cache and any trusted host
+certification authorities. Anything you already have with the same
+name (or the same host key entry) is left as it is, not overwritten,
+and everything else in the file is ignored. PuTTY tells you how much
+it imported and skipped. The import only reads the file: it never
+reads or writes the registry itself.
+
 Each saved session is independent of the Default Settings
 configuration. If you change your preferences and update Default
 Settings, you must also update every saved session separately.
 
-Saved sessions are stored in the \i{Registry}, at the location
-
-\c HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions
-
-If you need to store them in a file, you could try the method
-described in \k{config-file}.
+Saved sessions are stored as files, one per session, in the
+\c{sessions} folder of PuTTY's configuration directory (\c{.putty} in
+your home folder, unless the \c{PUTTYDIR} environment variable names
+another).
 
 \S{config-closeonexit} \q{\ii{Close window} on exit}
 
@@ -2651,6 +2661,63 @@ off, you can reset PuTTY to always use the exact order of host key
 algorithms configured in the preference list described in
 \k{config-ssh-hostkey-order}, so that a listener will find out nothing
 about what keys you had stored.
+
+\S{config-ssh-sshfp} Checking host keys against \i{SSHFP} records in DNS
+
+A server administrator can publish fingerprints of a server's host
+keys in the DNS, as SSHFP records (RFC 4255 and RFC 6594). When PuTTY
+is presented with a host key it has not cached (or one that differs
+from the cached key), it can look these records up and use them as
+evidence about whether the key is genuine. If the key is already
+cached and matches, no lookup is made.
+
+These settings are in a box of their own: press \q{DNS SSHFP
+Settings} at the bottom of the Host keys panel. (They aren't available
+in mid-session reconfiguration.)
+
+\b \q{Never look up SSHFP records}: PuTTY makes no DNS query.
+
+\b \q{Report the result, but always ask me} (the default): PuTTY
+looks up the records and says in the host key prompt whether the key
+matches them, but always asks you to confirm.
+
+\b \q{Trust a DNSSEC-validated match}: as above, but if the key is
+not cached and matches an SSHFP record in a DNS answer that was
+\i{DNSSEC}-validated, PuTTY accepts the key without asking. It does not
+store it in the host key cache. A key that contradicts the cache
+always produces the usual warning.
+
+\q{Require valid SSHFP} makes the check compulsory. PuTTY then looks
+up SSHFP records on every connection, including for host keys it has
+already cached, and refuses to connect unless the server's key
+matches one of them. Anything else fails the check: no records, only
+non-matching records, a failed lookup, or no lookup at all (because a
+proxy resolves host names, or the server presented a key type or
+certificate that SSHFP can't describe). PuTTY does not offer to accept
+the key anyway. A match need not be DNSSEC-validated. This option
+applies even if the setting above is \q{Never look up SSHFP records}.
+Host keys configured manually (\k{config-ssh-kex-manual-hostkeys}) and
+certificates accepted through a trusted certification authority are
+not affected.
+
+A DNS answer counts as validated only if the system's resolver says so
+(the AD bit). PuTTY cannot check that claim itself, so it is only as
+good as the path to the resolver: anyone who can forge a DNS answer
+can also forge the AD bit. Recent versions of glibc ignore the AD bit
+unless the \c{trust-ad} option is set in \c{/etc/resolv.conf}, but
+other systems (including macOS, the BSDs and older glibc) pass it
+through as received. Only choose this setting if the machine uses a
+validating resolver on the local machine or reached over a trusted
+path. On Windows, PuTTY cannot currently tell whether an answer was
+validated, so SSHFP results are reported but never skip the prompt.
+
+If you use a proxy that looks up host names for you (see
+\k{config-proxy-dns}), PuTTY does not make an SSHFP lookup either,
+since that would reveal to the local DNS resolver which host you are
+connecting to.
+
+The lookup happens in the background, and its result is recorded in
+the Event Log.
 
 \S{config-ssh-kex-manual-hostkeys} \ii{Manually configuring host keys}
 
