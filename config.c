@@ -2814,7 +2814,7 @@ void setup_config_box(struct controlbox *b, bool midsession,
         if (!midsession) {
             s = ctrl_getset(b, "Connection/SSH/Host keys", "sshfp",
                             "Host key fingerprints published in DNS (SSHFP)");
-            ctrl_radiobuttons(s, "Check unknown host keys against DNS:", 'd',
+            ctrl_radiobuttons(s, "Check unknown host keys against DNS:", 'n',
                               1, HELPCTX(ssh_sshfp),
                               conf_radiobutton_handler,
                               I(CONF_ssh_verify_host_key_dns),
