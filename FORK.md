@@ -12,6 +12,19 @@ This tree is PuTTY 0.84 with three changes:
 Everything else is meant to stay as close to upstream as possible, so
 that new upstream releases can be merged with little conflict.
 
+## Licence
+
+PuTTY is distributed under the MIT licence; the full text, with
+upstream's copyright notices, is in [`LICENCE`](LICENCE), unchanged
+from the 0.84 release. The changes in this fork are released under the
+same licence. Anyone redistributing this tree or binaries built from it
+must keep that notice. PuTTY, PuTTYgen and Pageant show it under
+*About > Licence* (compiled in from `LICENCE`); the command-line tools
+don't, so ship `LICENCE` alongside the binaries, as upstream does.
+
+`LICENCE` keeps upstream's file name and contents so that upstream
+releases merge cleanly; don't rename it or reformat it.
+
 ## Status
 
 | Area | State |
@@ -83,14 +96,23 @@ same name.
 | Value | Behaviour |
 |---|---|
 | 0, never | No lookup |
-| 1, ask | Look up; say in the host key prompt whether the key matches |
-| 2, yes (default) | As "ask", and an uncached key matching a DNSSEC-validated record is accepted without a prompt (and not stored) |
+| 1, ask (default) | Look up; say in the host key prompt whether the key matches |
+| 2, yes | As "ask", and an uncached key matching a DNSSEC-validated record is accepted without a prompt (and not stored) |
 
 Decisions made where the request didn't say:
 
-* **Default is "yes".** DNSSEC was not specified; this matches
-  OpenSSH's `VerifyHostKeyDNS=yes`: only a validated match is trusted,
-  an unvalidated match is shown as advice.
+* **Default is "ask".** "Yes" trusts the resolver's AD bit, which
+  anyone who can forge the DNS answer can also forge on macOS, the BSDs
+  and glibc before 2.31 (which pass AD through unless told not to).
+  So by default a DNS match is advice in the prompt, never a reason to
+  skip it. (OpenSSH's own default is "no".)
+* **The lookup never blocks.** It runs on a short-lived helper thread
+  (the only thing that thread does), and the host key check carries on
+  from the event loop when it finishes, as it would after a dialog box.
+  This follows PuTTY's rule that almost nothing may block.
+* **No lookup when a proxy resolves host names** (the same test as
+  `name_lookup` uses), so the local resolver doesn't learn the
+  destination.
 * **Lookups happen only when the key isn't already cached**, so known
   hosts cost no extra DNS query and leak nothing.
 * **A key that contradicts the cache always gets the full warning**,
