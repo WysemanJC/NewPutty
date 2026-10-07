@@ -93,6 +93,7 @@ add_library(puttygen-common OBJECT
   no-gtk.c
   noise.c
   storage.c
+  ${CMAKE_SOURCE_DIR}/jsonstore.c
   ${CMAKE_SOURCE_DIR}/sshpubk.c
   ${CMAKE_SOURCE_DIR}/sshrand.c)
 
@@ -263,3 +264,7 @@ target_link_libraries(pageant
 installed_program(pageant)
 
 add_sources_from_current_dir(test_conf unicode.c stubs/no-uxsel.c)
+
+add_executable(test_jsonstore
+  ${CMAKE_SOURCE_DIR}/test/test_jsonstore.c)
+target_link_libraries(test_jsonstore settings utils)

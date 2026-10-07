@@ -140,6 +140,7 @@ add_executable(puttygen
   noise.c
   no-jump-list.c
   storage.c
+  ${CMAKE_SOURCE_DIR}/jsonstore.c
   help.c
   ${CMAKE_SOURCE_DIR}/sshpubk.c
   ${CMAKE_SOURCE_DIR}/sshrand.c

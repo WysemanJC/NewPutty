@@ -29,7 +29,7 @@ add_library(console STATIC
   clicons.c console.c)
 
 add_library(settings STATIC
-  cmdline.c settings.c)
+  cmdline.c settings.c jsonstore.c)
 
 add_library(crypto STATIC
   proxy/cproxy.c proxy/sshproxy.c)
