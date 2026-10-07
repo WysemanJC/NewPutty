@@ -4,11 +4,15 @@ on:
   push:
   pull_request:
 
+# Each job uploads its programs (with LICENCE and FORK.md) as an
+# artifact, so a set of binaries for every platform can be fetched
+# from any run.
+
 jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -20,15 +24,22 @@ jobs:
       - name: Unit tests
         run: |
           build/test_jsonstore "$RUNNER_TEMP/puttydir"
+          build/test_regimport "$RUNNER_TEMP/regimportdir"
           build/test_sshfp
           build/test_conf
       - name: SSHFP end-to-end test
         run: sudo test/sshfp-e2e.sh build
+      - name: Collect binaries
+        run: sh scripts/collect-binaries.sh build dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: newputty-linux-x86_64
+          path: dist/
 
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install dependencies
         run: brew install cmake gtk+3 pkg-config
       - name: Build (GTK)
@@ -38,12 +49,19 @@ jobs:
       - name: Unit tests
         run: |
           build/test_jsonstore "$RUNNER_TEMP/puttydir"
+          build/test_regimport "$RUNNER_TEMP/regimportdir"
           build/test_sshfp
+      - name: Collect binaries
+        run: sh scripts/collect-binaries.sh build dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: newputty-macos-arm64
+          path: dist/
 
   windows-mingw:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install MinGW
         run: |
           sudo apt-get update
@@ -54,12 +72,29 @@ jobs:
           cmake --build build -j"$(nproc)"
       - name: Check no executable can write the registry
         run: scripts/check-no-registry-writes.sh build
+      - name: Collect binaries
+        run: sh scripts/collect-binaries.sh build dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: newputty-windows-x64-mingw
+          path: dist/
 
   windows-msvc:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build
         run: |
           cmake -S . -B build
           cmake --build build --config Release
+      - name: Unit tests (run natively on Windows)
+        run: |
+          build\Release\test_regimport.exe "$env:RUNNER_TEMP\regimportdir"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Collect binaries
+        shell: bash
+        run: sh scripts/collect-binaries.sh build/Release dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: newputty-windows-x64-msvc
+          path: dist/

@@ -30,11 +30,11 @@ releases merge cleanly; don't rename it or reformat it.
 | Area | State |
 |---|---|
 | JSON storage, Unix | Done; unit tests pass (also under ASan/UBSan) |
-| JSON storage, Windows | Done; cross-compiles with MinGW; not yet run on Windows |
+| JSON storage, Windows | Done; builds with MinGW and MSVC (CI); in use on Windows 11; `test_regimport` runs natively in CI |
 | No registry writes | Done; no `.exe` imports a registry write API (checked by script) |
 | SSHFP, Unix | Done; unit tests and an end-to-end test against a real sshd pass |
-| SSHFP, Windows | Done, advisory only (see below); not yet run on Windows |
-| macOS | Should build via the GTK port; CI job added but not yet run |
+| SSHFP, Windows | Done, advisory only (see below); tested by hand on Windows 11 |
+| macOS | Builds via the GTK port (CI, Apple silicon); unit tests pass; needs Homebrew GTK at run time |
 | Import of existing settings | Windows registry exports (.reg), from the Session panel; tests pass |
 
 ## Configuration directory

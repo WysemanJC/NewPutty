@@ -202,7 +202,7 @@ static char *named_file_leaf(const char *dir, const char *name)
 }
 
 /*
- * Enumerate "<dir>/*.json", yielding decoded names in sorted order
+ * Enumerate the .json files in <dir>, yielding decoded names in sorted order
  * (directory order varies between platforms and filesystems).
  */
 typedef struct named_enum {
