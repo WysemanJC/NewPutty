@@ -23,6 +23,17 @@ for prog in putty pterm puttytel plink pscp psftp psusan psocks \
     done
 done
 
+# The macOS application bundle. ditto keeps its permissions and
+# signature intact in the zip (CI artifacts don't preserve them).
+if [ -d "$build/PuTTY.app" ]; then
+    if command -v ditto >/dev/null 2>&1; then
+        ditto -c -k --keepParent "$build/PuTTY.app" "$dist/PuTTY.app.zip"
+    else
+        cp -R "$build/PuTTY.app" "$dist/"
+    fi
+    found=$((found + 1))
+fi
+
 if [ "$found" -eq 0 ]; then
     echo "no programs found in $build" >&2
     exit 1

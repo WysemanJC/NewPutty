@@ -40,17 +40,27 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Install dependencies
-        run: brew install cmake gtk+3 pkg-config
-      - name: Build (GTK)
+      # No Homebrew packages: the app uses only what ships with macOS.
+      - name: Build (native Cocoa)
         run: |
-          cmake -S . -B build
+          cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
           cmake --build build -j"$(sysctl -n hw.ncpu)"
+      - name: Check only system libraries are linked
+        run: scripts/check-macos-deps.sh build
       - name: Unit tests
         run: |
           build/test_jsonstore "$RUNNER_TEMP/puttydir"
           build/test_regimport "$RUNNER_TEMP/regimportdir"
           build/test_sshfp
+      - name: Sign the app (ad hoc)
+        run: codesign --force --sign - build/PuTTY.app
+      - name: Smoke test the app
+        run: scripts/macos-smoke-test.sh build screenshots
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: macos-screenshots
+          path: screenshots/
       - name: Collect binaries
         run: sh scripts/collect-binaries.sh build dist
       - uses: actions/upload-artifact@v7

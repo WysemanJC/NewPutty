@@ -34,8 +34,46 @@ releases merge cleanly; don't rename it or reformat it.
 | No registry writes | Done; no `.exe` imports a registry write API (checked by script) |
 | SSHFP, Unix | Done; unit tests and an end-to-end test against a real sshd pass |
 | SSHFP, Windows | Done, advisory only (see below); tested by hand on Windows 11 |
-| macOS | Builds via the GTK port (CI, Apple silicon); unit tests pass; needs Homebrew GTK at run time |
+| macOS | Native Cocoa app, `PuTTY.app` (see below); needs nothing beyond macOS itself (checked in CI); unit tests pass |
 | Import of existing settings | Windows registry exports (.reg), from the Session panel; tests pass |
+
+## macOS
+
+On macOS, PuTTY is a native Cocoa application (`macos/`), not the GTK
+port: it links only against the libraries and frameworks that come
+with macOS, so no Homebrew, XQuartz or GTK is needed. Build it with
+
+```
+cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+cmake --build build
+open build/PuTTY.app
+```
+
+This also builds the command-line tools (`plink`, `pscp`, `psftp`,
+`puttygen`, `pageant`, `psocks`) as plain macOS executables, again with
+no extra libraries. `scripts/check-macos-deps.sh build` checks that.
+Configuring with `-DPUTTY_MACOS_COCOA=OFF` gives the old GTK build
+instead.
+
+The app is one process with any number of session windows, in the
+usual Mac style: Command-N opens the configuration box for a new
+session, and the Session menu has Saved Sessions, Duplicate, Restart,
+Change Settings, the Event Log and the special commands. The same
+menu is on Control-click in a terminal window. The configuration box
+is upstream's (the same panels as on Windows and Linux, including the
+SSHFP settings and registry import), with two Mac additions under
+Terminal > Keyboard: whether Option and/or Command act as Meta.
+Settings are the same JSON files in `~/.putty` as on the other
+platforms.
+
+CI builds an ad hoc signed `PuTTY.app` (as `PuTTY.app.zip` in the
+`newputty-macos-arm64` artifact). It isn't notarised, so macOS will
+refuse to open a downloaded copy at first. Either Control-click it in
+the Finder and choose Open, or clear the quarantine flag:
+
+```
+xattr -dr com.apple.quarantine PuTTY.app
+```
 
 ## Configuration directory
 
@@ -149,7 +187,8 @@ New: `json.h`, `utils/json.c`, `jsonstore.h`, `jsonstore.c`,
 `sshfp.h`, `ssh/sshfp.c`, `unix/dns.c`, `windows/dns.c`,
 `test/test_jsonstore.c`, `test/test_sshfp.c`, `test/sshfp-e2e.sh`,
 `test/fake_dns.py`, `scripts/check-no-registry-writes.sh`,
-`.github/workflows/build.yml`.
+`.github/workflows/build.yml`; the macOS front end in `macos/`, with
+`scripts/check-macos-deps.sh` and `scripts/macos-smoke-test.sh`.
 
 Rewritten: `unix/storage.c`, `windows/storage.c` (now only filesystem
 primitives and platform-specific setting types).
@@ -159,7 +198,9 @@ Small edits: `conf.h`, `conf-enums.h`, `putty.h` (new setting),
 `ssh/kex2-client.c`, `ssh/login1.c` (SSHFP in host key verification),
 `windows/utils/registry.c` and `windows/platform.h` (read-only registry
 helpers), `windows/pageant.c` (sessions menu via storage API),
-`windows/putty.c` (`-cleanup` text), `doc/config.but`, CMake files.
+`windows/putty.c` (`-cleanup` text), `doc/config.but`, CMake files,
+`unix/platform.h` (macOS Cocoa build settings),
+`scripts/collect-binaries.sh`.
 
 ## Importing from the registry
 
@@ -221,9 +262,8 @@ SSHFP turned off in a hand-written JSON Default Settings file.
 6. **Concurrent writes to `hostkeys.json`.** Two PuTTYs storing keys at
    the same moment can lose one update (upstream Unix has the same
    race). Add a lock file.
-7. **macOS**: confirm the CI GTK build; package as an app bundle
-   (upstream has `unix/osxlaunch.c`). A native Cocoa interface is a
-   separate, much larger project.
+7. **macOS**: notarise the app (needs an Apple Developer ID), and try
+   it on Intel Macs (CI builds for Apple silicon only).
 8. **Docs**: replace remaining registry references in `doc/` and the
    man pages.
 9. **Upstream tracking**: import the official git history (the build
