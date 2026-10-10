@@ -108,7 +108,7 @@ struct dlgparam {
 @property int colr, colg, colb;
 @property bool colok;
 @property (copy) void (^onFinish)(void);
-@property (copy) NSString *copyText;
+@property (copy) NSString *selectionText;
 
 /* Config box only */
 @property (strong) NSOutlineView *tree;
@@ -523,17 +523,17 @@ static PTUCtrl *UC(dlgcontrol *ctrl, dlgparam *dp)
 
 - (void)copy:(id)sender
 {
-    if (self.copyText.length) {
+    if (self.selectionText.length) {
         NSPasteboard *pb = [NSPasteboard generalPasteboard];
         [pb clearContents];
-        [pb setString:self.copyText forType:NSPasteboardTypeString];
+        [pb setString:self.selectionText forType:NSPasteboardTypeString];
     }
 }
 
 - (BOOL)validateMenuItem:(NSMenuItem *)item
 {
     if (item.action == @selector(copy:))
-        return self.copyText.length > 0;
+        return self.selectionText.length > 0;
     return YES;
 }
 
@@ -2243,7 +2243,7 @@ static void eventlog_list_handler(dlgcontrol *ctrl, dlgparam *dp,
                 put_fmt(es->seldata, "%s\n", es->events_circular[j]);
             }
         }
-        DLG(dp).copyText = ns(es->seldata->s);
+        DLG(dp).selectionText = ns(es->seldata->s);
     }
 }
 

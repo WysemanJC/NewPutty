@@ -2612,12 +2612,6 @@ static void after_change_settings(void *vctx, int retval)
       case NSScrollerIncrementPage:
         term_scroll(term, 0, +height);
         break;
-      case NSScrollerDecrementLine:
-        term_scroll(term, 0, -1);
-        break;
-      case NSScrollerIncrementLine:
-        term_scroll(term, 0, +1);
-        break;
       case NSScrollerKnob:
       case NSScrollerKnobSlot: {
         int total = term->tempsblines + term->rows;
