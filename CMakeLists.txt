@@ -1,4 +1,14 @@
 cmake_minimum_required(VERSION 3.7...3.28)
+
+# On macOS, build for the oldest system PuTTY.app supports (see
+# LSMinimumSystemVersion in macos/Info.plist.in) rather than for
+# whatever version the SDK happens to be. This has to be set before
+# project(), and is ignored on other platforms.
+if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET 12.0 CACHE STRING
+    "Minimum macOS version to build for")
+endif()
+
 project(putty LANGUAGES C)
 
 set(CMAKE_C_STANDARD 99)
