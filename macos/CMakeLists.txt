@@ -72,6 +72,8 @@ set_target_properties(putty PROPERTIES
   MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in
   MACOSX_BUNDLE_BUNDLE_NAME PuTTY
   MACOSX_BUNDLE_GUI_IDENTIFIER io.github.wysemanjc.newputty
+  # The Xcode generator checks Info.plist against this setting.
+  XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER io.github.wysemanjc.newputty
   MACOSX_BUNDLE_ICON_FILE "${MACOS_BUNDLE_ICON}")
 
 # The Objective-C parts use automatic reference counting.

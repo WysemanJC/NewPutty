@@ -44,7 +44,7 @@ port: it links only against the libraries and frameworks that come
 with macOS, so no Homebrew, XQuartz or GTK is needed. Build it with
 
 ```
-cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
 cmake --build build
 open build/PuTTY.app
 ```
