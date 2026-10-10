@@ -43,7 +43,7 @@ jobs:
       # No Homebrew packages: the app uses only what ships with macOS.
       - name: Build (native Cocoa)
         run: |
-          cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          cmake -S . -B build -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
           cmake --build build -j"$(sysctl -n hw.ncpu)"
       - name: Check only system libraries are linked
         run: scripts/check-macos-deps.sh build
