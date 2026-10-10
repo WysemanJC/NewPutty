@@ -33,6 +33,16 @@
 #define BUILDINFO_PLATFORM_GTK "OS X (GTK)"
 #define BUILDINFO_GTK
 
+#elif defined MACOS_COCOA
+/*
+ * The native Cocoa front end in macos/. It shares the OS X tweaks to
+ * the configuration (Option/Command as Meta) and clipboard handling,
+ * but none of the GTK workarounds.
+ */
+#define OSX_META_KEY_CONFIG /* two possible Meta keys to choose from */
+
+#define BUILDINFO_PLATFORM_GTK "macOS (Cocoa)"
+
 #elif defined NOT_X_WINDOWS
 
 #define BUILDINFO_PLATFORM_GTK "Unix (pure GTK)"
@@ -111,7 +121,7 @@ unsigned long getticks(void);
     X(CLIP_CUSTOM_3, "<custom#3>")                        \
     /* end of list */
 
-#ifdef OSX_GTK
+#if defined OSX_GTK || defined MACOS_COCOA
 /* OS X has no PRIMARY selection */
 #define MOUSE_SELECT_CLIPBOARD CLIP_NULL
 #define MOUSE_PASTE_CLIPBOARD CLIP_LOCAL

@@ -7,6 +7,11 @@ set_property(CACHE PUTTY_GTK_VERSION
 
 set(GTK_FOUND FALSE)
 
+if(PUTTY_MACOS_COCOA)
+  # The Cocoa front end replaces GTK entirely.
+  return()
+endif()
+
 macro(try_pkg_config_gtk VER PACKAGENAME)
   if(NOT GTK_FOUND AND
       (PUTTY_GTK_VERSION STREQUAL ANY OR PUTTY_GTK_VERSION STREQUAL ${VER}))

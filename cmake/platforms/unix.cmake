@@ -78,6 +78,20 @@ else()
   set(OMIT_UTMP ON)
 endif()
 
+# On macOS, PuTTY's GUI is the native Cocoa front end in macos/, which
+# needs nothing beyond the system frameworks. Turn this off to build the
+# GTK front end instead (with GTK from Homebrew or similar).
+if(APPLE)
+  option(PUTTY_MACOS_COCOA
+    "Build the native macOS (Cocoa) front end instead of the GTK one" ON)
+else()
+  set(PUTTY_MACOS_COCOA OFF)
+endif()
+if(PUTTY_MACOS_COCOA)
+  enable_language(OBJC)
+  add_compile_definitions(MACOS_COCOA)
+endif()
+
 include(cmake/gtk.cmake)
 
 if(GTK_FOUND)
@@ -133,6 +147,9 @@ find_package(Threads REQUIRED)
 list(APPEND dns_libraries Threads::Threads)
 
 set(extra_dirs charset)
+if(PUTTY_MACOS_COCOA)
+  list(APPEND extra_dirs macos)
+endif()
 
 if(PUTTY_GSSAPI STREQUAL DYNAMIC)
   add_optional_system_lib(dl dlopen)
