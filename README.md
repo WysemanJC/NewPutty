@@ -65,7 +65,7 @@ upstream releases merge cleanly. Don't rename or reformat it.
 | Settings storage, Windows | Registry, under `HKCU\Software\SimonTatham\PuTTY` | JSON files in `%USERPROFILE%\.putty`. The registry is only read, and only to import old settings. |
 | Settings storage, Unix | Text files in `~/.putty` or `~/.config/putty` | JSON files in `~/.putty` |
 | Settings location | Different on each platform, with several overrides (`PUTTYSESSIONS`, etc.) | `$PUTTYDIR` if set, otherwise `~/.putty`, on every platform |
-| Host key checks | Local cache only | Local cache, plus SSHFP records in DNS |
+| Host key checks | Local cache, manually configured keys and host CAs | All of those, plus SSHFP records in DNS |
 | macOS | GTK build (needs Homebrew/XQuartz) | Native Cocoa `PuTTY.app` that needs only macOS. The GTK build is still available. |
 | Importing old settings | — | **Import** button on the Session panel reads a `.reg` export of upstream's registry settings, on any platform |
 | CI | — | GitHub Actions builds and tests on Linux, macOS and Windows (MinGW and MSVC) |
