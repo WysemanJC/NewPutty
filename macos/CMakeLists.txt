@@ -27,28 +27,26 @@ if(Python3_Interpreter_FOUND)
   set(icondir ${CMAKE_CURRENT_BINARY_DIR}/icons)
   set(MACOS_ICON_FILE ${icondir}/PuTTY.icns)
   set(mkicon ${CMAKE_SOURCE_DIR}/icons/mkicon.py)
-  set(macicon ${CMAKE_SOURCE_DIR}/icons/macicon.py)
+  set(mkicns ${CMAKE_CURRENT_SOURCE_DIR}/mkicns.py)
   set(icon_commands)
-  set(macicon_args)
-  foreach(size 16 32 48)
+  set(mkicns_args)
+  # The artwork is drawn smaller than the icon, to leave room for the
+  # rounded-square background. mkicns.py --art-size gives the size.
+  foreach(size 16 32 64 128 256 512 1024)
+    execute_process(
+      COMMAND ${Python3_EXECUTABLE} ${mkicns} --art-size ${size}
+      OUTPUT_VARIABLE artsize OUTPUT_STRIP_TRAILING_WHITESPACE)
     list(APPEND icon_commands
-      COMMAND ${Python3_EXECUTABLE} ${mkicon} -2 putty_icon ${size}
-              putty-${size}-mono.pam
-      COMMAND ${Python3_EXECUTABLE} ${mkicon} putty_icon ${size}
-              putty-${size}.pam)
-    list(APPEND macicon_args
-      mono:putty-${size}-mono.pam colour:putty-${size}.pam)
+      COMMAND ${Python3_EXECUTABLE} ${mkicon} -T putty_icon ${artsize}
+              putty-art-${size}.pam)
+    list(APPEND mkicns_args ${size}:putty-art-${size}.pam)
   endforeach()
-  list(APPEND icon_commands
-    COMMAND ${Python3_EXECUTABLE} ${mkicon} putty_icon 128 putty-128.pam)
-  list(APPEND macicon_args colour:putty-128.pam)
   add_custom_command(OUTPUT ${MACOS_ICON_FILE}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${icondir}
     ${icon_commands}
-    COMMAND ${Python3_EXECUTABLE} ${macicon} ${macicon_args}
-            output:PuTTY.icns
+    COMMAND ${Python3_EXECUTABLE} ${mkicns} PuTTY.icns ${mkicns_args}
     WORKING_DIRECTORY ${icondir}
-    DEPENDS ${mkicon} ${macicon}
+    DEPENDS ${mkicon} ${mkicns}
     COMMENT "Generating PuTTY.icns")
   file(MAKE_DIRECTORY ${icondir})
   set_source_files_properties(${MACOS_ICON_FILE} PROPERTIES
